@@ -9,9 +9,11 @@ from cvars import ConVar
 from events import Event
 from engines.server import engine_server, global_vars
 from engines.sound import Sound, SOUND_FROM_WORLD
+from entities.entity import Entity
 from filters.players import PlayerIter
-from listeners import OnLevelInit
+from listeners import OnLevelInit, OnLevelShutdown
 from listeners.tick import Delay
+from loggers import LogManager
 from menus import PagedMenu, PagedOption
 from messages import SayText2
 from paths import CFG_PATH, GAME_PATH
@@ -66,6 +68,16 @@ strings_config = LangStrings(info.basename + "/config")
 strings_mapnames = LangStrings(info.basename + "/mapnames")
 
 with ConfigManager(info.basename, cvar_prefix='spmc_') as config_manager:
+    cvar_logging_level = config_manager.cvar(
+        name="logging_level",
+        default=1,
+        description=strings_config['logging_level']
+    )
+    cvar_logging_areas = config_manager.cvar(
+        name="logging_areas",
+        default=5,
+        description=strings_config['logging_areas']
+    )
     cvar_timelimit = config_manager.cvar(
         name="timelimit",
         default=-1,
@@ -147,6 +159,8 @@ with open(str(DOWNLOADLIST)) as f:   # TODO: Do we need str() here?
         if not line:
             continue
         downloadables.add(line)
+
+log = LogManager(info.basename, cvar_logging_level, cvar_logging_areas)
 
 
 class CorruptJSONFile(Exception):
@@ -669,12 +683,17 @@ def schedule_vote(was_extended=False):
     delay_scheduled_vote = Delay(seconds, launch_vote, scheduled=True)
 
 
-def change_level():
+def change_level(round_end=False):
     if Status.next_map is None:
         raise RuntimeError("It's already time to change the level, "
                            "but next map is yet to be decided")
 
+    if cvar_instant_change_level.get_bool() or round_end:
+        game_end_entity = Entity.find_or_create('game_end')
+        game_end_entity.end_game()
 
+    else:
+        Status.round_end_needed = True
 
 
 @OnLevelInit
@@ -717,3 +736,15 @@ def listener_on_level_init(map_name):
         cvar_extend_time.get_float() * 60 + EXTRA_SECONDS_AFTER_VOTE,
         change_level
     )
+
+
+@OnLevelShutdown
+def listener_on_level_shutdown(*args):
+    if Status.next_map is not None:
+        print("shutdown: {}".format(args))
+
+
+@Event('round_end')
+def on_round_end(game_event):
+    if Status.round_end_needed:
+        change_level(round_end=True)
