@@ -1,2 +1,2 @@
-admin_plugin/actions/startyourvoting.mp3
-admin_plugin/actions/endofvote.mp3
+sound/admin_plugin/actions/startyourvoting.mp3
+sound/admin_plugin/actions/endofvote.mp3
