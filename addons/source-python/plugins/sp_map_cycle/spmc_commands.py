@@ -1,7 +1,9 @@
 from datetime import datetime
 
 from sp_map_cycle.db import connect
+from sp_map_cycle.db import delete
 from sp_map_cycle.db import select
+from sp_map_cycle.db import update
 
 from core import echo_console
 
@@ -37,22 +39,22 @@ Saves current maps list from memory to the database
 > spmc db load
 Reloads data from the database into memory
 
-> spmc unset-new-flag <map filename>
+> spmc db set-force-old <map filename>
 Marks the given map as old (no NEW! postfix)
 
-> spmc unset-new-flag-all
+> spmc db set-force-old-all
 Marks all known maps as old (no NEW! postfix)
 
-> spmc restore-new-flag <map filename>
+> spmc db unset-force-old-flag <map filename>
 Restores 'new' flag for the given map based on its detection date.
 The flag may not be restored if the map is actually old, but you can make
-database forget such map by typing 'spmc forget-map <map filename>'.
+database forget such map by typing 'spmc db forget-map <map filename>'.
 
-> spmc forget-map <map filename>
+> spmc db forget-map <map filename>
 Removes the given map from the database, doesn't remove the map from the mapcycle.
 Map will be added to the database again if it's still in mapcycle.
 
-> spmc scan-maps-folder [<map prefix> ...]
+(NOT IMPLEMENTED YET)> spmc scan-maps-folder [<map prefix> ...]
 Scans contents of ../maps folder and puts scanned maps in mapcycle.txt.
 You can then convert that mapcycle.txt to mapcycle.json by typing 'spmc rebuild-mapcycle'.
 If map prefixes are given, only maps that start with that prefix will be added to the list.
@@ -72,11 +74,15 @@ class SPMCCommandReloadMapCycle(SPMCCommand):
         except FileNotFoundError:
             echo_console("Error: Missing mapcycle.json, please rebuild it first")
         else:
-            reload_map_list()
-            echo_console("Reloaded maps list from JSON")
+            try:
+                reload_map_list()
+            except RuntimeError as e:
+                echo_console("Error: {}".format(e))
+            else:
+                echo_console("Reloaded maps list from JSON")
 
-            if load_maps_from_db():
-                echo_console("Data from the database was reloaded")
+                if load_maps_from_db():
+                    echo_console("Data from the database was reloaded")
 
 
 class SPMCCommandRebuildMapCycle(SPMCCommand):
@@ -101,23 +107,25 @@ class SPMCCommandDumpDatabase(SPMCCommand):
             echo_console("Could not connect to the database")
             return
 
-        echo_console("+--------------------------------+----------+-------+-------+----------+")
-        echo_console("| Map File Name (w/o .bsp)       | Detected | Old?* | Likes | Dislikes |")
-        echo_console("+--------------------------------+----------+-------+-------+----------+")
+        try:
+            echo_console("+--------------------------------+----------+-------+-------+----------+")
+            echo_console("| Map File Name (w/o .bsp)       | Detected | Old?* | Likes | Dislikes |")
+            echo_console("+--------------------------------+----------+-------+-------+----------+")
 
-        for row in select(conn, 'maps', ('filename', 'detected', 'force_old', 'likes')):
-            echo_console("| {}| {}| {}| {}| {}|".format(
-                row['filename'].ljust(31)[:31],
-                datetime.fromtimestamp(row['detected']).strftime('%x').ljust(9)[:9],
-                "YES".ljust(6) if row['force_old'] else "NO".ljust(6),
-                str(row['likes']).ljust(6)[:6],
-                str(row['dislikes']).ljust(9)[:9],
-            ))
+            for row in select(conn, 'maps', ('filename', 'detected', 'force_old', 'likes', 'dislikes')):
+                echo_console("| {}| {}| {}| {}| {}|".format(
+                    row['filename'].ljust(31)[:31],
+                    datetime.fromtimestamp(row['detected']).strftime('%x').ljust(9)[:9],
+                    "YES".ljust(6) if row['force_old'] else "NO".ljust(6),
+                    str(row['likes']).ljust(6)[:6],
+                    str(row['dislikes']).ljust(9)[:9],
+                ))
 
-        echo_console("+--------------------------------+----------+-------+-------+----------+")
-        echo_console("* Only shows if the map was marked old via 'spmc unset-new-flag' command")
+            echo_console("+--------------------------------+----------+-------+-------+----------+")
+            echo_console("* Only shows if the map was marked old via 'spmc db set-force-old' command")
 
-        conn.close()
+        finally:
+            conn.close()
 
 
 class SPMCCommandSaveToDatabase(SPMCCommand):
@@ -134,12 +142,131 @@ class SPMCCommandLoadFromDatabase(SPMCCommand):
             echo_console("Data from the database was reloaded")
 
 
+class SPMCCommandSetForceOld(SPMCCommand):
+    def callback(self, args):
+        try:
+            filename = args.pop(0)
+        except IndexError:
+            echo_console("Not enough parameters, type 'spmc help' to get help")
+            return
+
+        conn = connect()
+        if conn is None:
+            echo_console("Could not connect to the database")
+            return
+
+        try:
+            if update(
+                    conn,
+                    'maps',
+                    {'force_old': True},
+                    where='filename=?',
+                    args=(filename.lower(), )
+            ) > 0:
+
+                echo_console("Operation succeeded.")
+
+            else:
+                echo_console("Error: Unknown map: {}".format(filename.lower(), ))
+
+        finally:
+            conn.close()
+
+
+class SPMCCommandSetForceOldAll(SPMCCommand):
+    def callback(self, args):
+        conn = connect()
+        if conn is None:
+            echo_console("Could not connect to the database")
+            return
+
+        try:
+            if update(
+                    conn,
+                    'maps',
+                    {'force_old': True},
+            ) > 0:
+
+                echo_console("Operation succeeded.")
+
+            else:
+                echo_console("Error: No known maps in the database.")
+
+        finally:
+            conn.close()
+
+
+class SPMCCommandUnsetForceOld(SPMCCommand):
+    def callback(self, args):
+        try:
+            filename = args.pop(0)
+        except IndexError:
+            echo_console("Not enough parameters, type 'spmc help' to get help")
+            return
+
+        conn = connect()
+        if conn is None:
+            echo_console("Could not connect to the database")
+            return
+
+        try:
+            if update(
+                    conn,
+                    'maps',
+                    {'force_old': False},
+                    where='filename=?',
+                    args=(filename.lower(), )
+            ) > 0:
+
+                echo_console("Operation succeeded.")
+
+            else:
+                echo_console("Error: Unknown map: {}".format(filename.lower(), ))
+
+        finally:
+            conn.close()
+
+
+class SPMCCommandForgetMap(SPMCCommand):
+    def callback(self, args):
+        try:
+            filename = args.pop(0)
+        except IndexError:
+            echo_console("Not enough parameters, type 'spmc help' to get help")
+            return
+
+        conn = connect()
+        if conn is None:
+            echo_console("Could not connect to the database")
+            return
+
+        try:
+            if delete(
+                    conn,
+                    'maps',
+                    where='filename=?',
+                    args=(filename.lower(), )
+            ) > 0:
+
+                echo_console("Operation succeeded.")
+
+            else:
+                echo_console("Error: Unknown map: {}".format(filename.lower(), ))
+
+        finally:
+            conn.close()
+
+
 spmc_commands = {}
 spmc_commands['spmc'] = SPMCCommand('spmc')
 spmc_commands['help'] = SPMCCommandHelp('help', spmc_commands['spmc'])
+spmc_commands['reload-mapcycle'] = SPMCCommandReloadMapCycle('reload-mapcycle', spmc_commands['spmc'])
+spmc_commands['rebuild-mapcycle'] = SPMCCommandRebuildMapCycle('rebuild-mapcycle', spmc_commands['spmc'])
 spmc_commands['db'] = SPMCCommandDB('db', spmc_commands['spmc'])
 spmc_commands['db show'] = SPMCCommandDumpDatabase('show', spmc_commands['db'])
 spmc_commands['db save'] = SPMCCommandSaveToDatabase('save', spmc_commands['db'])
 spmc_commands['db load'] = SPMCCommandLoadFromDatabase('load', spmc_commands['db'])
-spmc_commands['reload-mapcycle'] = SPMCCommandReloadMapCycle('reload-mapcycle', spmc_commands['spmc'])
-spmc_commands['rebuild-mapcycle'] = SPMCCommandRebuildMapCycle('rebuild-mapcycle', spmc_commands['spmc'])
+spmc_commands['db set-force-old'] = SPMCCommandSetForceOld('set-force-old', spmc_commands['db'])
+spmc_commands['db set-force-old-all'] = SPMCCommandSetForceOldAll('set-force-old-all', spmc_commands['db'])
+spmc_commands['db unset-force-old'] = SPMCCommandUnsetForceOld('unset-force-old', spmc_commands['db'])
+spmc_commands['db forget-map'] = SPMCCommandForgetMap('forget-map', spmc_commands['db'])
