@@ -14,16 +14,12 @@ class RecursiveTranslationStrings(TranslationStrings):
                 new_tokens = self.tokens.copy()
                 del new_tokens[token_name]    # To avoid infinite recursion
 
-                token = token.get_string(language, **new_tokens)
+                token = token.get_string(language, **tokens)
                 self.tokens[token_name] = token
 
         for token_name, token in tokens.items():
             if isinstance(token, TranslationStrings):
-                new_tokens = tokens.copy()
-                del new_tokens[token_name]    # To avoid infinite recursion
-
-                token = token.get_string(language, **new_tokens)
-                tokens[token_name] = token
+                tokens[token_name] = token.get_string(language)
 
         return super().get_string(language, **tokens)
 

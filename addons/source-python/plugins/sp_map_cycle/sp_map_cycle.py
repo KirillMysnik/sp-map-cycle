@@ -377,8 +377,9 @@ def tell(players, message, with_tag=True, **tokens):
 
     if isinstance(message, TranslationStrings):
         if with_tag:
-            tokens['message'] = message
-            message = strings_common['chat_tag']
+            message = insert_tokens(strings_common['chat_tag'],
+                                    base=ColoredRecursiveTranslationStrings,
+                                    message=message)
 
         SayText2(message=message).send(*player_indexes, **tokens)
         return
