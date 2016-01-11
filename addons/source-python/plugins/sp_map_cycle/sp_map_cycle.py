@@ -985,9 +985,9 @@ def reload_map_list():
             continue
 
         if engine_server.is_map_valid(filename):
-            log.log_debug("Adding valid map {}".format(filename))
-
             maps[filename.lower()] = MapCycleMap(json_dict)
+
+    log.log_debug("Added {} valid maps".format(len(maps)))
 
     # Now rebuild nomination menu
     def select_callback(popup, player_index, option):
@@ -998,7 +998,8 @@ def reload_map_list():
     popup_nominate = PagedMenu(select_callback=select_callback,
                                title=strings_popups['nominate_map'])
 
-    for map_ in sorted(maps.values(), key=lambda map_: map_.filename):
+    maps_ = list(maps.values())
+    for map_ in sorted(maps_, key=lambda map_: map_.filename):
         selectable = not map_.played_recently
         popup_nominate.append(PagedOption(
             text=map_.name,
@@ -1006,8 +1007,7 @@ def reload_map_list():
             highlight=selectable,
             selectable=selectable))
 
-        log.log_debug("Added new map to the !nominate menu: {} "
-                      "(selectable={})".format(map_.filename, selectable))
+    log.log_debug("Added {} maps to the !nominate menu".format(len(maps_)))
 
 
 def reload_maps_from_mapcycle():
@@ -1083,20 +1083,6 @@ def load():
 
     log.log_debug("Reloaded map list from JSON")
 
-    # Also mark current level name (if it's loaded) as a recently played
-    if global_vars.map_name:
-        recent_map_names.append(global_vars.map_name)
-        log.log_debug("Current level name is {}".format(recent_map_names[-1]))
-
-        Status.current_map = maps.get(global_vars.map_name.lower())
-
-    # We think that the level is loaded with us
-    Status.map_start_time = time()
-    log.log_debug("Level start time: {}".format(
-                  datetime.fromtimestamp(
-                      Status.map_start_time
-                  ).strftime('%X')))
-
     # Save old mp_timelimit value
     global mp_timelimit_old_value
     mp_timelimit_old_value = cvar_mp_timelimit.get_float()
@@ -1123,12 +1109,26 @@ def load():
     # We don't need mp_timelimit to change the maps for us
     cvar_mp_timelimit.set_float(0.0)
 
-    # Schedule the vote, it will be scheduled as if the map is loaded
-    # with us
-    schedule_vote()
+    # Also mark current level name (if it's loaded) as a recently played
+    if global_vars.map_name:
+        recent_map_names.append(global_vars.map_name)
+        log.log_debug("Current level name is {}".format(recent_map_names[-1]))
 
-    # Schedule level changing - this can be later cancelled by map extensions
-    schedule_change_level()
+        Status.current_map = maps.get(global_vars.map_name.lower())
+
+        # We think that the level is loaded with us
+        Status.map_start_time = time()
+        log.log_debug("Level start time: {}".format(
+                      datetime.fromtimestamp(
+                          Status.map_start_time
+                      ).strftime('%X')))
+
+        # Schedule the vote, it will be scheduled as if the map is loaded
+        # with us
+        schedule_vote()
+
+        # Schedule level changing - this can be later cancelled by map extensions
+        schedule_change_level()
 
     # ... chat message
     broadcast(strings_common['loaded'])
@@ -1290,8 +1290,7 @@ def launch_vote(scheduled=False):
             selectable=selectable
         ))
 
-        log.log_debug("Added new map to the vote: {} "
-                      "(selectable={})".format(map_.filename, selectable))
+    log.log_debug("Added {} maps to the vote".format(len(maps_)))
 
     # Send popup to players
     for user in users.values():
