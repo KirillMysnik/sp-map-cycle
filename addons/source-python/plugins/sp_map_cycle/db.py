@@ -73,7 +73,7 @@ def insert(conn, table, data, args=(), commit=True):
     return cur.rowcount
 
 
-def update(conn, table, data, where, args=(), commit=True):
+def update(conn, table, data, where=None, args=(), commit=True):
     table = "{}{}".format(TABLE_PREFIX, table)
     cur = conn.cursor()
 
@@ -82,7 +82,10 @@ def update(conn, table, data, where, args=(), commit=True):
     for column in keys:
         temp.append("{}=?".format(column))
 
-    q = "UPDATE {} SET {} WHERE {}".format(table, ', '.join(temp), where)
+    if where:
+        q = "UPDATE {} SET {} WHERE {}".format(table, ', '.join(temp), where)
+    else:
+        q = "UPDATE {} SET {}".format(table, ', '.join(temp))
 
     cur.execute(q, values + tuple(args))
 
