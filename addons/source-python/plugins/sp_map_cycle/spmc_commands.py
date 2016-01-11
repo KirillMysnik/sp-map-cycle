@@ -1,11 +1,16 @@
 from datetime import datetime
+import os
+
+from core import echo_console
+from paths import GAME_PATH
 
 from sp_map_cycle.db import connect
 from sp_map_cycle.db import delete
 from sp_map_cycle.db import select
 from sp_map_cycle.db import update
 
-from core import echo_console
+MAPS_FOLDER = str(GAME_PATH / 'maps')
+MAPCYCLETXT = str(GAME_PATH / 'cfg' / 'mapcycle.txt')
 
 
 class SPMCCommand:
@@ -54,7 +59,7 @@ database forget such map by typing 'spmc db forget-map <map filename>'.
 Removes the given map from the database, doesn't remove the map from the mapcycle.
 Map will be added to the database again if it's still in mapcycle.
 
-(NOT IMPLEMENTED YET)> spmc scan-maps-folder [<map prefix> ...]
+> spmc scan-maps-folder [<map prefix> ...]
 Scans contents of ../maps folder and puts scanned maps in mapcycle.txt.
 You can then convert that mapcycle.txt to mapcycle.json by typing 'spmc rebuild-mapcycle'.
 If map prefixes are given, only maps that start with that prefix will be added to the list.
@@ -93,6 +98,8 @@ class SPMCCommandRebuildMapCycle(SPMCCommand):
         except FileNotFoundError:
             echo_console("""Error: No mapcycle.txt nor mapcycle_default.txt found in cfg directory.
 You can create one automatically by typing 'spmc scan-maps-folder'.""")
+        else:
+            echo_console("mapcycle.json was rebuild")
 
 
 class SPMCCommandDB(SPMCCommand):
@@ -257,6 +264,49 @@ class SPMCCommandForgetMap(SPMCCommand):
             conn.close()
 
 
+class SPMCScanMapsFolder(SPMCCommand):
+    def callback(self, args):
+        if args:
+            prefixes = list(map(lambda prefix: prefix.lower(), args))
+            echo_console("Scanning only maps with the "
+                         "following prefixes:\n{}".format(','.join(prefixes)))
+
+            def is_valid_map(filename):
+                if not os.path.isfile(os.path.join(MAPS_FOLDER, filename)):
+                    return False
+
+                if not os.path.splitext(filename)[1].lower().endswith('.bsp'):
+                    return False
+
+                mapname = os.path.splitext(filename)[0].lower()
+                for prefix in prefixes:
+                    if mapname.startswith(prefix):
+                        return True
+
+                return False
+
+        else:
+            echo_console("Scanning all maps...")
+
+            def is_valid_map(filename):
+                if not os.path.isfile(os.path.join(MAPS_FOLDER, filename)):
+                    return False
+
+                return os.path.splitext(filename)[1].lower().endswith('.bsp')
+
+        rs = []
+        for filename in os.listdir(MAPS_FOLDER):
+            if is_valid_map(filename):
+                rs.append(os.path.splitext(filename)[0].lower())
+
+        with open(MAPCYCLETXT, 'w') as f:
+            for mapname in rs:
+                f.write(mapname + '\n')
+
+        echo_console("{} maps were scanned and written to "
+                     "mapcycle.txt".format(len(rs)))
+
+
 spmc_commands = {}
 spmc_commands['spmc'] = SPMCCommand('spmc')
 spmc_commands['help'] = SPMCCommandHelp('help', spmc_commands['spmc'])
@@ -270,3 +320,4 @@ spmc_commands['db set-force-old'] = SPMCCommandSetForceOld('set-force-old', spmc
 spmc_commands['db set-force-old-all'] = SPMCCommandSetForceOldAll('set-force-old-all', spmc_commands['db'])
 spmc_commands['db unset-force-old'] = SPMCCommandUnsetForceOld('unset-force-old', spmc_commands['db'])
 spmc_commands['db forget-map'] = SPMCCommandForgetMap('forget-map', spmc_commands['db'])
+spmc_commands['scan-maps-folder'] = SPMCScanMapsFolder('scan-maps-folder', spmc_commands['spmc'])

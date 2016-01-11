@@ -30,7 +30,8 @@ from menus import Text
 from menus.radio import SimpleRadioMenu
 from menus.radio import SimpleRadioOption
 from messages import SayText2
-from paths import CFG_PATH, GAME_PATH
+from paths import CFG_PATH
+from paths import GAME_PATH
 from players.entity import Player
 from players.helpers import userid_from_index
 from stringtables.downloads import Downloadables
@@ -216,6 +217,12 @@ with ConfigManager(info.basename, cvar_prefix='spmc_') as config_manager:
         description=strings_config['votemap_whatever_option'],
         min_value=0
     )
+    cvar_alphabetic_sort_enable = config_manager.cvar(
+        name="alphabetic_sort_enable",
+        default=0,
+        description=strings_config['alphabetic_sort_enable'],
+        min_value=0
+    )
     cvar_sound_vote_start = config_manager.cvar(
         name="sound_vote_start",
         default="admin_plugin/actions/startyourvoting.mp3",
@@ -260,7 +267,19 @@ with ConfigManager(info.basename, cvar_prefix='spmc_') as config_manager:
         min_value=0.0
     )
     config_manager.section("!nextmap Settings")
+    cvar_nextmap_enable = config_manager.cvar(
+        name="nextmap_enable",
+        default=1,
+        description=strings_config['nextmap_enable'],
+        min_value=0
+    )
     config_manager.section("!timeleft Settings")
+    cvar_timeleft_enable = config_manager.cvar(
+        name="timeleft_enable",
+        default=1,
+        description=strings_config['timeleft_enable'],
+        min_value=0
+    )
     config_manager.section("Like/Dislike Settings")
     cvar_likemap_enable = config_manager.cvar(
         name="likemap_enable",
@@ -389,7 +408,7 @@ def init_popups():
     # Nomination popup is recreated by reload_map_list() every time it's called
     popup_nominate = None
 
-    # Nomination popup is never destroyed
+    # LikeMap popup is never destroyed
     def likemap_select_callback(popup, player_index, option):
         user = users[userid_from_index(player_index)]
         user.likemap_callback(option.value)
@@ -505,6 +524,18 @@ class MapCycleUser:
 
         return None
 
+    def get_nextmap_denial_reason(self):
+        if not cvar_nextmap_enable.get_bool():
+            return strings_common['error_disabled']
+
+        return None
+
+    def get_timeleft_denial_reason(self):
+        if not cvar_timeleft_enable.get_bool():
+            return strings_common['error_disabled']
+
+        return None
+
     def vote_callback(self, map_):
         reason = self.get_vote_denial_reason()
         if reason is not None:
@@ -576,6 +607,43 @@ class MapCycleUser:
 
         if rating != 0:
             rated_steamids[self.player.steamid.upper()] = rating
+
+    def nextmap_callback(self):
+        reason = self.get_nextmap_denial_reason()
+        if reason is not None:
+            tell(self.player, reason)
+            return
+
+        if Status.next_map is None:
+            tell(self.player, strings_common['nextmap_unknown'])
+
+        else:
+            tell(
+                self.player,
+                strings_common['nextmap_is'],
+                map=Status.next_map.name
+            )
+
+    def timeleft_callback(self):
+        reason = self.get_timeleft_denial_reason()
+        if reason is not None:
+            tell(self.player, reason)
+            return
+
+        if cvar_timelimit.get_int() == 0:
+            tell(self.player, strings_common['timeleft_never'])
+            return
+
+        if Status.round_end_needed:
+            tell(self.player, strings_common['timeleft_last_round'])
+            return
+
+        delta = datetime.fromtimestamp(Status.map_end_time) - datetime.now()
+        tell(
+            self.player,
+            strings_common['timeleft_timeleft'],
+            timeleft=str(delta)
+        )
 
 
 class MapCycleItem:
@@ -983,8 +1051,11 @@ class Status:
     # Next map (MapCycleMap) to change to, used by change_level()
     next_map = None
 
-    # time() when current map started, used by !timeleft command
+    # time() when current map started
     map_start_time = 0
+
+    # time() when current map should end, used by !timeleft command
+    map_end_time = 0
 
     # How many times "Extend this map..." option has won, used
     used_extends = 0
@@ -1170,20 +1241,32 @@ def launch_vote(scheduled=False):
     maps_ = maps.values()
 
     # Filter hidden maps out
-    maps_ = filter(lambda map_: not map_.hidden, maps_)
+    maps_ = list(filter(lambda map_: not map_.hidden, maps_))
 
-    # Sort by name (alphabetically)
-    if cvar_alphabetic_sort_by_fullname.get_bool():
-        maps_ = sorted(maps_, key=lambda map_: map_.name)
+    if not maps_:
+        warn(PlayersCannotVote("Please add more maps to the server or "
+                               "reconfigure Source.Python Map Cycle"))
+        return
+
+    # Check if we need to do an initial alphabetic sort
+    if cvar_alphabetic_sort_enable.get_bool():
+
+        # Sort by name (alphabetically)
+        if cvar_alphabetic_sort_by_fullname.get_bool():
+            maps_ = sorted(maps_, key=lambda map_: map_.name)
+        else:
+            maps_ = sorted(maps_, key=lambda map_: map_.filename)
     else:
-        maps_ = sorted(maps_, key=lambda map_: map_.filename)
+
+        # Shuffle
+        shuffle(maps_)
 
     # Now sort by rating (likes, likes - dislikes or likes:dislikes)
     if cvar_likemap_enable.get_bool():
         maps_ = sorted(maps_, key=lambda map_: map_.rating, reverse=True)
 
     # Now separate new and old maps
-    maps_ = sorted(maps_, key=lambda map_: map_.innew, reverse=True)
+    maps_ = sorted(maps_, key=lambda map_: map_.isnew, reverse=True)
 
     # Now sort by nominations
     maps_ = sorted(maps_, key=lambda map_: map_.nominations, reverse=True)
@@ -1195,10 +1278,6 @@ def launch_vote(scheduled=False):
     max_options = cvar_votemap_max_options.get_int()
     if max_options > 0:
         maps_ = maps_[:max_options]
-
-    if not maps_:
-        warn(PlayersCannotVote("Please add more maps to the server or "
-                               "reconfigure Source.Python Map Cycle"))
 
     # Fill popup with the maps
     for map_ in maps_:
@@ -1361,6 +1440,8 @@ def schedule_change_level(was_extended=False):
 
     global delay_changelevel
     delay_changelevel = Delay(seconds, change_level)
+
+    Status.map_end_time = time() + seconds
 
     log.log_debug("We will end the game in {} seconds.".format(seconds))
 
@@ -1623,12 +1704,13 @@ def command_on_spmc(command):
             command[i].lower())
 
         if next_command is None:
+            i -= 1
             break
 
         current_command = next_command
 
     args = []
-    for j in range(i, command.get_arg_count()):
+    for j in range(i + 1, command.get_arg_count()):
         args.append(command[j])
 
     if current_command is spmc_commands['spmc']:
@@ -1665,9 +1747,6 @@ def say_command_on_nominate(command, index, teamonly):
 @NoSpamSayCommand(('!rtv', 'rtv', 'rockthevote', '!rockthevote'))
 def say_command_on_rtv(command, index, teamonly):
     user = users[userid_from_index(index)]
-
-    # We don't check for denial reason here because
-    # rtv_callback() does that for us
     user.rtv_callback()
 
 
@@ -1681,3 +1760,15 @@ def say_command_on_likemap(command, index, teamonly):
         return
 
     user.send_popup(popup_likemap)
+
+
+@NoSpamSayCommand(('!nextmap', 'nextmap'))
+def say_command_on_nextmap(command, index, teamonly):
+    user = users[userid_from_index(index)]
+    user.nextmap_callback()
+
+
+@NoSpamSayCommand(('!timeleft', 'timeleft'))
+def say_command_on_nextmap(command, index, teamonly):
+    user = users[userid_from_index(index)]
+    user.timeleft_callback()
