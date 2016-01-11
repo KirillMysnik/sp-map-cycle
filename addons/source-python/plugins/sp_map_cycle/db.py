@@ -23,7 +23,7 @@ def connect():
         return None
 
 
-def create_table(conn, table, columns, column_types=(), args=()):
+def create_table(conn, table, columns, column_types=(), args=(), commit=True):
     """
     Create a table in the database if such table does not exist.
 
@@ -51,10 +51,12 @@ def create_table(conn, table, columns, column_types=(), args=()):
     q = "CREATE TABLE IF NOT EXISTS {} ({})".format(table, ', '.join(temp))
 
     cur.execute(q, args)
-    conn.commit()
+
+    if commit:
+        conn.commit()
 
 
-def insert(conn, table, data, args=()):
+def insert(conn, table, data, args=(), commit=True):
     table = "{}{}".format(TABLE_PREFIX, table)
     cur = conn.cursor()
 
@@ -64,10 +66,14 @@ def insert(conn, table, data, args=()):
         table, ', '.join(keys), ', '.join(('?', ) * len(values)))
 
     cur.execute(q, values +	tuple(args))
-    conn.commit()
+
+    if commit:
+        conn.commit()
+
+    return cur.rowcount
 
 
-def update(conn, table, data, where, args=()):
+def update(conn, table, data, where, args=(), commit=True):
     table = "{}{}".format(TABLE_PREFIX, table)
     cur = conn.cursor()
 
@@ -79,7 +85,25 @@ def update(conn, table, data, where, args=()):
     q = "UPDATE {} SET {} WHERE {}".format(table, ', '.join(temp), where)
 
     cur.execute(q, values + tuple(args))
-    conn.commit()
+
+    if commit:
+        conn.commit()
+
+    return cur.rowcount
+
+
+def delete(conn, table, where, args=(), commit=True):
+    table = "{}{}".format(TABLE_PREFIX, table)
+    cur = conn.cursor()
+
+    q = "DELETE FROM {} WHERE {}".format(table, where)
+
+    cur.execute(q, args)
+
+    if commit:
+        conn.commit()
+
+    return cur.rowcount
 
 
 def select_all(conn, table, where=None, order=None, limit=None, args=()):
@@ -133,5 +157,4 @@ create_table(conn, 'maps', (
     'TEXT',         'INTEGER',      'INTEGER',      'INTEGER',  'INTEGER',
 ))
 
-conn.commit()
 conn.close()
