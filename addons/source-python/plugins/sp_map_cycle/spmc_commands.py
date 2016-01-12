@@ -1,16 +1,36 @@
 from datetime import datetime
 import os
+from time import time
+
+from jinja2 import Environment
+from jinja2 import FileSystemLoader
 
 from core import echo_console
+from paths import BASE_PATH
 from paths import GAME_PATH
+from paths import LOG_PATH
 
 from sp_map_cycle.db import connect
 from sp_map_cycle.db import delete
 from sp_map_cycle.db import select
 from sp_map_cycle.db import update
+from sp_map_cycle.info import info
+
 
 MAPS_FOLDER = str(GAME_PATH / 'maps')
 MAPCYCLETXT = str(GAME_PATH / 'cfg' / 'mapcycle.txt')
+DBDUMP_PATH = LOG_PATH / info.basename
+DBDUMPHTML = DBDUMP_PATH / 'databasedump.html'
+DBDUMPTXT = DBDUMP_PATH / 'databasedump.txt'
+TEMPLATES_DIR = str(BASE_PATH / 'plugins' / info.basename / 'templates')
+DB_SHOW_CAP = 40
+
+
+os.makedirs(DBDUMP_PATH, exist_ok=True)
+
+j2env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+j2env.filters['strftime'] = lambda timestamp: datetime.fromtimestamp(timestamp).strftime('%c')
+j2template_html = j2env.get_template('databasedump.html')
 
 
 class SPMCCommand:
@@ -35,8 +55,13 @@ Reloads mapcycle.json
 > spmc rebuild-mapcycle
 Creates new mapcycle.json based on mapcycle.txt (mapcycle_default.txt)
 
-> spmc db show
-Prints contents of database.sqlite3
+> spmc db show [<starting ID>]
+Prints contents of database.sqlite3. If the starting ID is given, shows the
+contents only beginning from this ID.
+
+> spmc db dump-html
+Dumps contents of database.sqlite3 to an HTML page:
+<mod folder>/logs/source-python/sp_map_cycle/databasedump.html
 
 > spmc db save
 Saves current maps list from memory to the database
@@ -107,7 +132,46 @@ class SPMCCommandDB(SPMCCommand):
         echo_console("Not enough parameters, type 'spmc help' to get help")
 
 
-class SPMCCommandDumpDatabase(SPMCCommand):
+class SPMCCommandShowDatabase(SPMCCommand):
+    def callback(self, args):
+        start = int(args[0]) if args else 1
+
+        conn = connect()
+        if conn is None:
+            echo_console("Could not connect to the database")
+            return
+
+        try:
+            echo_console("+----+--------------------------------+----------+--------+-------------+")
+            echo_console("| ID | Map File Name (w/o .bsp)       | Detected | Old?** | Likes/Total |")
+            echo_console("+----+--------------------------------+----------+--------+-------------+")
+
+            for row in select(
+                    conn,
+                    'maps',
+                    ('rowid', 'filename', 'detected', 'force_old', 'likes', 'dislikes'),
+                    limit=DB_SHOW_CAP,
+                    offset=start-1
+            ):
+
+                echo_console("| {}| {}| {}| {}| {}|".format(
+                    str(row['rowid']).ljust(3)[:3],
+                    row['filename'].ljust(31)[:31],
+                    datetime.fromtimestamp(row['detected']).strftime('%x').ljust(9)[:9],
+                    "YES".ljust(7) if row['force_old'] else "NO".ljust(7),
+                    ("{:.2f}".format(row['likes']/(row['dislikes']+row['likes'])).ljust(12)[:12] if
+                     (row['dislikes']+row['likes']) != 0 else "n/a".ljust(12)),
+                ))
+
+            echo_console("+----+--------------------------------+----------+--------+-------------+")
+            echo_console("* Only showing rows from {} to {}".format(start, start + DB_SHOW_CAP))
+            echo_console("** Only shows if the map was marked old via 'spmc db set-force-old' command")
+
+        finally:
+            conn.close()
+
+
+class SPMCCommandDumpDatabaseHTML(SPMCCommand):
     def callback(self, args):
         conn = connect()
         if conn is None:
@@ -115,21 +179,24 @@ class SPMCCommandDumpDatabase(SPMCCommand):
             return
 
         try:
-            echo_console("+--------------------------------+----------+-------+-------+----------+")
-            echo_console("| Map File Name (w/o .bsp)       | Detected | Old?* | Likes | Dislikes |")
-            echo_console("+--------------------------------+----------+-------+-------+----------+")
+            rows = select(
+                conn,
+                'maps',
+                (
+                        'rowid',
+                        'filename',
+                        'detected',
+                        'force_old',
+                        'likes',
+                        'dislikes',
+                        'man_hours',
+                        'av_session_length'
+                ),
+            )
 
-            for row in select(conn, 'maps', ('filename', 'detected', 'force_old', 'likes', 'dislikes')):
-                echo_console("| {}| {}| {}| {}| {}|".format(
-                    row['filename'].ljust(31)[:31],
-                    datetime.fromtimestamp(row['detected']).strftime('%x').ljust(9)[:9],
-                    "YES".ljust(6) if row['force_old'] else "NO".ljust(6),
-                    str(row['likes']).ljust(6)[:6],
-                    str(row['dislikes']).ljust(9)[:9],
-                ))
+            j2template_html.stream(rows=rows, dumpdate=time()).dump(DBDUMPHTML)
 
-            echo_console("+--------------------------------+----------+-------+-------+----------+")
-            echo_console("* Only shows if the map was marked old via 'spmc db set-force-old' command")
+            echo_console("Dump written to {}".format(DBDUMPHTML))
 
         finally:
             conn.close()
@@ -313,7 +380,8 @@ spmc_commands['help'] = SPMCCommandHelp('help', spmc_commands['spmc'])
 spmc_commands['reload-mapcycle'] = SPMCCommandReloadMapCycle('reload-mapcycle', spmc_commands['spmc'])
 spmc_commands['rebuild-mapcycle'] = SPMCCommandRebuildMapCycle('rebuild-mapcycle', spmc_commands['spmc'])
 spmc_commands['db'] = SPMCCommandDB('db', spmc_commands['spmc'])
-spmc_commands['db show'] = SPMCCommandDumpDatabase('show', spmc_commands['db'])
+spmc_commands['db show'] = SPMCCommandShowDatabase('show', spmc_commands['db'])
+spmc_commands['db dump-html'] = SPMCCommandDumpDatabaseHTML('dump-html', spmc_commands['db'])
 spmc_commands['db save'] = SPMCCommandSaveToDatabase('save', spmc_commands['db'])
 spmc_commands['db load'] = SPMCCommandLoadFromDatabase('load', spmc_commands['db'])
 spmc_commands['db set-force-old'] = SPMCCommandSetForceOld('set-force-old', spmc_commands['db'])
