@@ -5,8 +5,8 @@ from random import shuffle
 from time import time
 from warnings import warn
 
+from colors import Color
 from commands.server import ServerCommand
-from config.manager import ConfigManager
 from core import echo_console
 from cvars import ConVar
 from events import Event
@@ -29,6 +29,7 @@ from menus import PagedOption
 from menus import Text
 from menus.radio import SimpleRadioMenu
 from menus.radio import SimpleRadioOption
+from messages import HudMsg
 from messages import SayText2
 from paths import CFG_PATH
 from paths import GAME_PATH
@@ -37,6 +38,41 @@ from players.helpers import userid_from_index
 from stringtables.downloads import Downloadables
 from translations.strings import TranslationStrings
 
+from sp_map_cycle.config_cvars import cvar_alphabetic_sort_by_fullname
+from sp_map_cycle.config_cvars import cvar_alphabetic_sort_enable
+from sp_map_cycle.config_cvars import cvar_extend_time
+from sp_map_cycle.config_cvars import cvar_fullname_skips_prefix
+from sp_map_cycle.config_cvars import cvar_instant_change_level
+from sp_map_cycle.config_cvars import cvar_likemap_enable
+from sp_map_cycle.config_cvars import cvar_likemap_method
+from sp_map_cycle.config_cvars import cvar_likemap_survey_duration
+from sp_map_cycle.config_cvars import cvar_likemap_whatever_option
+from sp_map_cycle.config_cvars import cvar_logging_level
+from sp_map_cycle.config_cvars import cvar_logging_areas
+from sp_map_cycle.config_cvars import cvar_max_extends
+from sp_map_cycle.config_cvars import cvar_new_map_timeout_days
+from sp_map_cycle.config_cvars import cvar_nextmap_enable
+from sp_map_cycle.config_cvars import cvar_nextmap_show_on_match_end
+from sp_map_cycle.config_cvars import cvar_nominate_allow_revote
+from sp_map_cycle.config_cvars import cvar_nominate_enable
+from sp_map_cycle.config_cvars import cvar_predict_missing_fullname
+from sp_map_cycle.config_cvars import cvar_recent_maps_limit
+from sp_map_cycle.config_cvars import cvar_rtv_delay
+from sp_map_cycle.config_cvars import cvar_rtv_enable
+from sp_map_cycle.config_cvars import cvar_rtv_needed
+from sp_map_cycle.config_cvars import cvar_scheduled_vote_time
+from sp_map_cycle.config_cvars import cvar_sound_vote_start
+from sp_map_cycle.config_cvars import cvar_sound_vote_end
+from sp_map_cycle.config_cvars import cvar_timeleft_auto_lastround_warning
+from sp_map_cycle.config_cvars import cvar_timeleft_enable
+from sp_map_cycle.config_cvars import cvar_timelimit
+from sp_map_cycle.config_cvars import cvar_use_fullname
+from sp_map_cycle.config_cvars import cvar_vote_duration
+from sp_map_cycle.config_cvars import cvar_votemap_allow_revote
+from sp_map_cycle.config_cvars import cvar_votemap_chat_reaction
+from sp_map_cycle.config_cvars import cvar_votemap_enable
+from sp_map_cycle.config_cvars import cvar_votemap_max_options
+from sp_map_cycle.config_cvars import cvar_votemap_whatever_option
 from sp_map_cycle.db import connect
 from sp_map_cycle.db import insert
 from sp_map_cycle.db import select
@@ -57,6 +93,15 @@ COLOR_SCHEME = {
     'default': "#242,242,242",
     'error': "#FF3636",
 }
+NEXTMAP_MSG_COLOR = Color(124, 173, 255)
+NEXTMAP_MSG_X = -1
+NEXTMAP_MSG_Y = 0.05
+NEXTMAP_MSG_EFFECT = 2
+NEXTMAP_MSG_FADEIN = 0.05
+NEXTMAP_MSG_FADEOUT = 0
+NEXTMAP_MSG_HOLDTIME = 10
+NEXTMAP_MSG_FXTIME = 0
+
 
 # List some unusual map prefixes
 MAP_PREFIXES = [
@@ -91,221 +136,11 @@ EXTRA_SECONDS_AFTER_VOTE = 5.0
 strings_common = BaseLangStrings(
     info.basename + "/strings", base=ColoredRecursiveTranslationStrings)
 
-strings_config = BaseLangStrings(
-    info.basename + "/config", base=TranslationStrings)
-
 strings_mapnames = BaseLangStrings(
     info.basename + "/mapnames", base=TranslationStrings)
 
 strings_popups = BaseLangStrings(
     info.basename + "/popups", base=RecursiveTranslationStrings)
-
-with ConfigManager(info.basename, cvar_prefix='spmc_') as config_manager:
-    config_manager.section("Logging")
-    cvar_logging_level = config_manager.cvar(
-        name="logging_level",
-        default=4,
-        description=strings_config['logging_level']
-    )
-    cvar_logging_areas = config_manager.cvar(
-        name="logging_areas",
-        default=5,
-        description=strings_config['logging_areas']
-    )
-    config_manager.section("Maps Settings")
-    cvar_timelimit = config_manager.cvar(
-        name="timelimit",
-        default=-1,
-        description=strings_config['timelimit'],
-        min_value=-1.0
-    )
-    cvar_instant_change_level = config_manager.cvar(
-        name="instant_change_level",
-        default=0,
-        description=strings_config['instant_change_level'],
-        min_value=0
-    )
-    cvar_max_extends = config_manager.cvar(
-        name="max_extends",
-        default=2,
-        description=strings_config['max_extends'],
-        min_value=-1.0
-    )
-    cvar_extend_time = config_manager.cvar(
-        name="extend_time",
-        default=15,
-        description=strings_config['extend_time'],
-        min_value=1.0
-    )
-    cvar_recent_maps_limit = config_manager.cvar(
-        name="recent_maps_limit",
-        default=2,
-        description=strings_config['recent_maps_limit'],
-        min_value=0
-    )
-    cvar_new_map_timeout_days = config_manager.cvar(
-        name="new_map_timeout_days",
-        default=5,
-        description=strings_config['new_map_timeout_days'],
-        min_value=-1,
-    )
-    cvar_use_fullname = config_manager.cvar(
-        name="use_fullname",
-        default=1,
-        description=strings_config['use_fullname'],
-        min_value=0
-    )
-    cvar_predict_missing_fullname = config_manager.cvar(
-        name="predict_missing_fullname",
-        default=1,
-        description=strings_config['predict_missing_fullname'],
-        min_value=0
-    )
-    cvar_fullname_skips_prefix = config_manager.cvar(
-        name="fullname_skips_prefix",
-        default=1,
-        description=strings_config['fullname_skips_prefix'],
-        min_value=0
-    )
-    cvar_alphabetic_sort_by_fullname = config_manager.cvar(
-        name="alphabetic_sort_by_fullname",
-        default=0,
-        description=strings_config['alphabetic_sort_by_fullname'],
-        min_value=0
-    )
-    config_manager.section("Votes Settings")
-    cvar_votemap_enable = config_manager.cvar(
-        name="votemap_enable",
-        default=1,
-        description=strings_config['votemap_enable'],
-        min_value=0
-    )
-    cvar_votemap_max_options = config_manager.cvar(
-        name="votemap_max_options",
-        default=5,
-        description=strings_config['votemap_max_options'],
-        min_value=0
-    )
-    cvar_vote_duration = config_manager.cvar(
-        name="vote_duration",
-        default=30,
-        description=strings_config['vote_duration'],
-        min_value=5.0,
-    )
-    cvar_scheduled_vote_time = config_manager.cvar(
-        name="scheduled_vote_time",
-        default=5,
-        description=strings_config['scheduled_vote_time'],
-        min_value=0.0
-    )
-    cvar_votemap_chat_reaction = config_manager.cvar(
-        name="votemap_chat_reaction",
-        default=3,
-        description=strings_config['votemap_chat_reaction'],
-        min_value=0,
-        max_value=3
-    )
-    cvar_votemap_allow_revote = config_manager.cvar(
-        name="votemap_allow_revote",
-        default=1,
-        description=strings_config['votemap_allow_revote'],
-        min_value=0
-    )
-    cvar_votemap_whatever_option = config_manager.cvar(
-        name="votemap_whatever_option",
-        default=1,
-        description=strings_config['votemap_whatever_option'],
-        min_value=0
-    )
-    cvar_alphabetic_sort_enable = config_manager.cvar(
-        name="alphabetic_sort_enable",
-        default=0,
-        description=strings_config['alphabetic_sort_enable'],
-        min_value=0
-    )
-    cvar_sound_vote_start = config_manager.cvar(
-        name="sound_vote_start",
-        default="admin_plugin/actions/startyourvoting.mp3",
-        description=strings_config['sound_vote_start']
-    )
-    cvar_sound_vote_end = config_manager.cvar(
-        name="sound_vote_end",
-        default="admin_plugin/actions/endofvote.mp3",
-        description=strings_config['sound_vote_end']
-    )
-    config_manager.section("Nomination (!nominate) Settings")
-    cvar_nominate_enable = config_manager.cvar(
-        name="nominate_enable",
-        default=1,
-        description=strings_config['nominate_enable'],
-        min_value=0
-    )
-    cvar_nominate_allow_revote = config_manager.cvar(
-        name="nominate_allow_revote",
-        default=1,
-        description=strings_config['nominate_allow_revote'],
-        min_value=0
-    )
-    config_manager.section("RTV (!rtv) Settings")
-    cvar_rtv_enable = config_manager.cvar(
-        name="rtv_enable",
-        default=1,
-        description=strings_config['rtv_enable'],
-        min_value=0
-    )
-    cvar_rtv_needed = config_manager.cvar(
-        name="rtv_needed",
-        default=0.6,
-        description=strings_config['rtv_needed'],
-        min_value=0.0,
-        max_value=1.0
-    )
-    cvar_rtv_delay = config_manager.cvar(
-        name="rtv_delay",
-        default=30.0,
-        description=strings_config['rtv_delay'],
-        min_value=0.0
-    )
-    config_manager.section("!nextmap Settings")
-    cvar_nextmap_enable = config_manager.cvar(
-        name="nextmap_enable",
-        default=1,
-        description=strings_config['nextmap_enable'],
-        min_value=0
-    )
-    config_manager.section("!timeleft Settings")
-    cvar_timeleft_enable = config_manager.cvar(
-        name="timeleft_enable",
-        default=1,
-        description=strings_config['timeleft_enable'],
-        min_value=0
-    )
-    config_manager.section("Like/Dislike Settings")
-    cvar_likemap_enable = config_manager.cvar(
-        name="likemap_enable",
-        default=1,
-        description=strings_config['likemap_enable'],
-        min_value=0
-    )
-    cvar_likemap_method = config_manager.cvar(
-        name="likemap_method",
-        default=3,
-        description=strings_config['likemap_method'],
-        min_value=1,
-        max_value=3
-    )
-    cvar_likemap_whatever_option = config_manager.cvar(
-        name="likemap_whatever_option",
-        default=1,
-        description=strings_config['likemap_whatever_option'],
-        min_value=0
-    )
-    cvar_likemap_survey_duration = config_manager.cvar(
-        name="likemap_survey_duration",
-        default=10.0,
-        description=strings_config['likemap_survey_duration'],
-        min_value=0.0,
-    )
 
 
 cvar_mapcyclefile = ConVar('mapcyclefile')
@@ -325,11 +160,10 @@ with open(str(DOWNLOADLIST)) as f:   # TODO: Do we need str() here?
 log = LogManager(info.basename, cvar_logging_level, cvar_logging_areas)
 
 users = {}
+rated_steamids = {}
 
 maps = {}
 recent_map_names = []
-
-rated_steamids = {}
 
 
 class CorruptJSONFile(Exception):
@@ -669,6 +503,8 @@ class MapCycleMap(MapCycleItem):
         self.force_old = False
         self.likes = 0
         self.dislikes = 0
+        self.man_hours = 0.0
+        self.av_session_length = 0.0
         self.in_database = False
 
         if 'timerestrict' in json_dict:
@@ -931,6 +767,8 @@ def save_maps_to_db():
                         'force_old': map_.force_old,
                         'likes': map_.likes,
                         'dislikes': map_.dislikes,
+                        'man_hours': map_.man_hours,
+                        'av_session_length': map_.av_session_length,
                     },
                     where='filename=?',
                     args=(map_.filename.lower(), ),
@@ -947,6 +785,8 @@ def save_maps_to_db():
                         'force_old': map_.force_old,
                         'likes': map_.likes,
                         'dislikes': map_.dislikes,
+                        'man_hours': map_.man_hours,
+                        'av_session_length': map_.av_session_length,
                     },
                     commit=False,
                 )
@@ -1171,10 +1011,8 @@ def launch_vote(scheduled=False):
 
     Status.vote_status = Status.VoteStatus.IN_PROGRESS
 
-    # TODO: Should we get rid of delays cancelling if we are already
-    # checking VoteStatus?
+    # Cancel any scheduled votes in case somebody called us directly
     if delay_scheduled_vote is not None and delay_scheduled_vote.running:
-        delay_scheduled_vote.cancel()
         delay_scheduled_vote.cancel()
 
     global delay_end_vote   # We will assign to this later
@@ -1543,6 +1381,9 @@ def change_level(round_end=False):
 
         Status.round_end_needed = True
 
+        if cvar_timeleft_auto_lastround_warning.get_bool():
+            broadcast(strings_common['timeleft_last_round'])
+
 
 def check_if_enough_votes():
     def enough_votes():
@@ -1663,6 +1504,32 @@ def on_round_end(game_event):
         change_level(round_end=True)
 
 
+@Event('cs_win_panel_match')
+def on_cs_win_panel_match(game_event):
+    if Status.next_map is None:
+        return
+
+    if not cvar_nextmap_show_on_match_end.get_bool():
+        return
+
+    hud_msg = HudMsg(
+        insert_tokens(
+            strings_popups['nextmap_msg'],
+            map=Status.next_map.name
+        ),
+        color1=NEXTMAP_MSG_COLOR,
+        x=NEXTMAP_MSG_X,
+        y=NEXTMAP_MSG_Y,
+        effect=NEXTMAP_MSG_EFFECT,
+        fade_in=NEXTMAP_MSG_FADEIN,
+        fade_out=NEXTMAP_MSG_FADEOUT,
+        hold_time=NEXTMAP_MSG_HOLDTIME,
+        fx_time=NEXTMAP_MSG_FXTIME
+    )
+    hud_msg.send(*[user.player.index for user in users.values()])
+    broadcast(strings_common['nextmap_msg'], map=Status.next_map.name)
+
+
 @OnClientActive
 def listener_on_client_active(index):
     player = Player(index)
@@ -1718,6 +1585,11 @@ def command_on_spmc(command):
         return
 
     current_command.callback(args)
+
+
+@ServerCommand('spmc_launch_vote')
+def command_on_spmc_force_vote(command):
+    launch_vote(scheduled=False)
 
 
 @NoSpamSayCommand(('!votemap', 'votemap'))
