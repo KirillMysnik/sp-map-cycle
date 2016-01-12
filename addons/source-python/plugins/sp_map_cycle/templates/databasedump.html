@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>SPMC DB Dump @{{ dumpdate|strftime }}</title>
+        <style type="text/css">
+            * {
+                font-family: sans-serif;
+                font-size: 10pt;
+            }
+            html, body {
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                text-align: center;
+                background-color: #4379B7;
+            }
+            table {
+                border-collapse: collapse;
+            }
+            td, th {
+                padding: 10px;
+                border: 1px solid #4379B7;
+                background-color: #ffffff;
+            }
+            th {
+                cursor: default;
+            }
+            th:after {
+                content: " ❔";
+            }
+            .main {
+                display: inline-block;
+            }
+            .hint {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 300px;
+                display: none;
+                min-height: 25px;
+                padding: 20px;
+                background-color: #ffffff;
+                border: 3px solid #4379B7;
+                border-radius: 5px;
+                font-family: sans-serif;
+                font-size: 10pt;
+                z-index: 5;
+            }
+            a, a:link, a:hover, a:active {
+                color: #fff;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="main">
+            <h3>Source.Python Map Cycle Database Dump @{{ dumpdate|strftime }}</h3>
+            <table>
+                <tr>
+                    <th data-hint="Unique integer identifier for this map - its row number">ID</th>
+                    <th data-hint="Map file name (lowercase)">Map File Name (w/o .bsp)</th>
+                    <th data-hint="Date/time of when the map was added to the database">Detected</th>
+                    <th data-hint="Shows if you have used 'spmc db set-force-old' on the map">Old? (force_old)</th>
+                    <th data-hint="Number of likes this map received from players">Likes</th>
+                    <th data-hint="Number of dislikes this map received from players">Dislikes</th>
+                    <th data-hint="Reflects summary amount of time players have ever spent on the map">Man-hours</th>
+                    <th data-hint="Reflects average session length of all players that have ever played the map. Player's session length equals to 1 if they played the map from the beginning to the end without extension (full timelimit), >1 if they played to the end and the map was extended, <1 if they connected late / disconnected early or there was a !rtv. If the map was ended earlier by not !rtv but by spmc_launch_vote, it still counts as a full timelimit. Ending the map with spmc_launch_vote is the only way to count something valid towards session length if server's timelimit is zero.">Average Session Length</th>
+                </tr>
+                {% for row in rows %}
+                <tr>
+                    <td>{{ row.rowid }}</td>
+                    <td style="font-family: monospace;">{{ row.filename }}</td>
+                    <td>{{ row.detected|strftime }}</td>
+                    <td>{% if row.force_old %}YES{% else %}NO{% endif %}</td>
+                    <td>{{ row.likes }}</td>
+                    <td>{{ row.dislikes }}</td>
+                    <td>{{ row.man_hours }}</td>
+                    <td>{{ row.av_session_length }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            <a href="https://github.com/KirillMysnik/sp-map-cycle" target="_blank">https://github.com/KirillMysnik/sp-map-cycle</a>
+        </div>
+        <script type="application/javascript">
+            (function () {
+                var body = document.getElementsByTagName('body')[0];
+                var hint = body.appendChild(document.createElement('div'));
+                hint.classList.add('hint');
+                var ths = document.getElementsByTagName('th');
+                for (var i=0; i<ths.length; i++) {
+                    (function () {
+                        var th = ths[i];
+                        th.addEventListener('mouseover', function (event) {
+                            hint.innerHTML = th.getAttribute('data-hint');
+                            hint.style.display = 'block';
+                        });
+                        th.addEventListener('mouseout', function (event) {
+                            hint.style.display = '';
+                        });
+                    })();
+                }
+                body.addEventListener('mousemove', function (event) {
+                    hint.style.top = event.clientY + 'px';
+                    hint.style.left = event.clientX + 'px';
+                });
+            })();
+        </script>
+    </body>
+</html>
