@@ -109,20 +109,23 @@ def delete(conn, table, where, args=(), commit=True):
     return cur.rowcount
 
 
-def select_all(conn, table, where=None, order=None, limit=None, args=()):
+def select_all(conn, table, where=None, order=None, limit=None, offset=None, args=()):
     table = "{}{}".format(TABLE_PREFIX, table)
     cur = conn.cursor()
 
     q = "SELECT * FROM {}".format(table)
 
-    if where:
+    if where is not None:
         q += " WHERE {}".format(where)
 
-    if order:
+    if order is not None:
         q += " ORDER BY {}".format(order)
 
-    if limit:
+    if limit is not None:
         q += " LIMIT {}".format(limit)
+
+    if offset is not None:
+        q += " OFFSET {}".format(offset)
 
     cur.execute(q, args)
 
@@ -130,20 +133,23 @@ def select_all(conn, table, where=None, order=None, limit=None, args=()):
         yield row
 
 
-def select(conn, table, columns, where=None, order=None, limit=None, args=()):
+def select(conn, table, columns, where=None, order=None, limit=None, offset=None, args=()):
     table = "{}{}".format(TABLE_PREFIX, table)
     cur = conn.cursor()
 
     q = "SELECT {} FROM {}".format(', '.join(columns), table)
 
-    if where:
+    if where is not None:
         q += " WHERE {}".format(where)
 
-    if order:
+    if order is not None:
         q += " ORDER BY {}".format(order)
 
-    if limit:
+    if limit is not None:
         q += " LIMIT {}".format(limit)
+
+    if offset is not None:
+        q += " OFFSET {}".format(offset)
 
     cur.execute(q, args)
 
@@ -155,9 +161,9 @@ conn = connect()
 c = conn.cursor()
 
 create_table(conn, 'maps', (
-    'filename',     'detected',     'force_old',    'likes',    'dislikes',
+    'filename',    'detected',    'force_old',    'likes',      'dislikes',    'man_hours',    'av_session_length',
 ), (
-    'TEXT',         'INTEGER',      'INTEGER',      'INTEGER',  'INTEGER',
+    'TEXT',        'INTEGER',     'INTEGER',      'INTEGER',    'INTEGER',     'INTEGER',      'FLOAT',
 ))
 
 conn.close()
