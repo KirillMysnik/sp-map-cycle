@@ -163,7 +163,7 @@ c = conn.cursor()
 create_table(conn, 'maps', (
     'filename',    'detected',    'force_old',    'likes',      'dislikes',    'man_hours',    'av_session_length',
 ), (
-    'TEXT',        'INTEGER',     'INTEGER',      'INTEGER',    'INTEGER',     'INTEGER',      'FLOAT',
+    'TEXT',        'INTEGER',     'INTEGER',      'INTEGER',    'INTEGER',     'FLOAT',      'FLOAT',
 ))
 
 conn.close()
