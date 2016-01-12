@@ -757,6 +757,7 @@ def save_maps_to_db():
     c1 = c2 = 0
 
     try:
+        detected = int(time())
         for map_ in maps.values():
             if map_.in_database:
                 update(
@@ -781,7 +782,7 @@ def save_maps_to_db():
                     'maps',
                     {
                         'filename': map_.filename.lower(),
-                        'detected': int(time()),
+                        'detected': detected,
                         'force_old': map_.force_old,
                         'likes': map_.likes,
                         'dislikes': map_.dislikes,
@@ -790,6 +791,9 @@ def save_maps_to_db():
                     },
                     commit=False,
                 )
+                map_.in_database = True
+                map_.detected = detected
+
                 c2 += 1
 
         conn.commit()
