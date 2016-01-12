@@ -1502,6 +1502,7 @@ def on_round_end(game_event):
     if Status.round_end_needed:
         log.log_debug("round_end event, time to change the level")
         change_level(round_end=True)
+        Status.round_end_needed = False
 
 
 @Event('cs_win_panel_match')
