@@ -13,7 +13,6 @@ from events import Event
 from engines.server import engine_server
 from engines.server import global_vars
 from engines.sound import Sound
-from engines.sound import SOUND_FROM_WORLD
 from entities.entity import Entity
 from filters.players import PlayerIter
 from listeners import OnClientActive
@@ -421,7 +420,8 @@ def load():
         # with us
         schedule_vote()
 
-        # Schedule level changing - this can be later cancelled by map extensions
+        # Schedule level changing - this can be later cancelled
+        # by map extensions
         schedule_change_level()
 
     # ... chat message
@@ -584,8 +584,7 @@ def launch_vote(scheduled=False):
     # ... sound
     if cvar_sound_vote_start.get_string() != "":
         Sound(
-            sample=cvar_sound_vote_start.get_string(),
-            index=SOUND_FROM_WORLD
+            sample=cvar_sound_vote_start.get_string()
         ).play(*[user.player.index for user in user_manager.values()])
 
     # ... chat message
@@ -626,15 +625,14 @@ def finish_vote():
 
     if not candidate_maps:
         # If there're no maps on the server, there's not much we can do
-        log.log_debug("No maps to choose from in finish_vote()! "
-                      "Cancelling change_level...")
+        log.log_debug("No maps to choose from in finish_vote()!")
 
         broadcast(strings_common['no_choice'])
 
-        global delay_changelevel
         if delay_changelevel and delay_changelevel.running:
+            log.log_debug("Cancelling change_level...")
+
             delay_changelevel.cancel()
-            delay_changelevel = None
 
         return
 
@@ -646,7 +644,6 @@ def finish_vote():
 
     # If you ever want to implement VIP/Premium features into
     # !rtv and keep it fair, here's the place:
-    result_maps = list(result_maps)
     shuffle(result_maps)
 
     winner_map = result_maps[0]
@@ -657,7 +654,8 @@ def finish_vote():
         log.log_debug("Winner map: extend-this-map option")
 
         status.used_extends += 1
-        broadcast(strings_common['map_extended'], time=str(cvar_extend_time.get_int()))
+        broadcast(strings_common['map_extended'],
+                  time=str(cvar_extend_time.get_int()))
 
     else:
         log.log_debug("Winner map: {}".format(winner_map.filename))
@@ -668,7 +666,6 @@ def finish_vote():
     if cvar_sound_vote_end.get_string() != "":
         Sound(
             sample=cvar_sound_vote_end.get_string(),
-            index=SOUND_FROM_WORLD
         ).play(*[user.player.index for user in user_manager.values()])
 
 
@@ -950,12 +947,24 @@ def on_round_end(game_event):
 
 @Event('cs_win_panel_match')
 def on_cs_win_panel_match(game_event):
+    # Check if the vote is still in progress
+    if status.vote_status == status.VoteStatus.IN_PROGRESS:
+        log.log_debug("on_cs_win_panel_match: vote was still in "
+                      "progress, finishing")
+
+        finish_vote()
+
+    # Check if next map is decided
     if status.next_map is None:
+        log.log_debug("on_cs_win_panel_match: no next_map defined!")
+
         return
 
+    # Check if we need to show it on player screens
     if not cvar_nextmap_show_on_match_end.get_bool():
         return
 
+    # HudMsg
     hud_msg = HudMsg(
         insert_tokens(
             strings_popups['nextmap_msg'],
@@ -971,6 +980,8 @@ def on_cs_win_panel_match(game_event):
         fx_time=NEXTMAP_MSG_FXTIME
     )
     hud_msg.send(*[user.player.index for user in user_manager.values()])
+
+    # SayText2
     broadcast(strings_common['nextmap_msg'], map=status.next_map.name)
 
 
@@ -988,8 +999,7 @@ def listener_on_client_disconnect(index):
     userid = userid_from_index(index)
     user = user_manager.get(userid)
     if user is not None:
-        user.session_user.reset_disconnect()
-        del user_manager[userid]
+        user_manager.delete(user)
 
     if status.vote_status == status.VoteStatus.NOT_STARTED:
         check_if_enough_rtv()
@@ -1004,6 +1014,7 @@ engine_server_changelevel = get_virtual_function(engine_server, 'ChangeLevel')
 @PreHook(engine_server_changelevel)
 def hook_on_pre_change_level(args):
     log.log_debug("Hooked ChangeLevel...")
+
     # Set our own next map
     if status.next_map is not None:
         args[1] = status.next_map.filename
@@ -1036,7 +1047,15 @@ def command_on_spmc(command):
 
 @ServerCommand('spmc_launch_vote')
 def command_on_spmc_force_vote(command):
+    if status.vote_status != status.VoteStatus.NOT_STARTED:
+        echo_console("Can't launch the vote as it has "
+                     "already started or ended")
+
+        return
+
     launch_vote(scheduled=False)
+
+    echo_console("Map vote has been launched")
 
 
 @NoSpamSayCommand(('!votemap', 'votemap'))

@@ -36,15 +36,7 @@ class MapCycleSessionUser:
         self._since_round_start = False
         self._last_check_time = -1
 
-    # Event handlers
     def on_round_start(self):
-
-        # Check if this user is still connected to the server
-        if self.current_user is None:
-
-            # If not, no reason to continue
-            return
-
         # Mark the user present to round start
         self._since_round_start = True
 

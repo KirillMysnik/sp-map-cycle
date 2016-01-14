@@ -43,6 +43,10 @@ class MapCycleUserManager(dict):
         self[player.userid] = MapCycleUser(self, player)
         return self[player.userid]
 
+    def delete(self, user):
+        user.session_user.reset_disconnect()
+        del self[user.player.userid]
+
     def get_by_index(self, index):
         return self[userid_from_index(index)]
 
