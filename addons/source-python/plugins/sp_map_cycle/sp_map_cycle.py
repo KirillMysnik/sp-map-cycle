@@ -584,10 +584,9 @@ def launch_vote(scheduled=False):
     # ... sound
     if cvar_sound_vote_start.get_string() != "":
         Sound(
-            recipients=[user.player.index for user in user_manager.values()],
-            index=SOUND_FROM_WORLD,
-            sample=cvar_sound_vote_start.get_string()
-        ).play()
+            sample=cvar_sound_vote_start.get_string(),
+            index=SOUND_FROM_WORLD
+        ).play(*[user.player.index for user in user_manager.values()])
 
     # ... chat message
     broadcast(strings_common['vote_started'])
@@ -667,9 +666,10 @@ def finish_vote():
 
     # ... sound
     if cvar_sound_vote_end.get_string() != "":
-        Sound(recipients=[user.player.index for user in user_manager.values()],
-              index=SOUND_FROM_WORLD,
-              sample=cvar_sound_vote_end.get_string()).play()
+        Sound(
+            sample=cvar_sound_vote_end.get_string(),
+            index=SOUND_FROM_WORLD
+        ).play(*[user.player.index for user in user_manager.values()])
 
 
 def set_next_map(map_):
