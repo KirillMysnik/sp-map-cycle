@@ -1,10 +1,9 @@
 from config.manager import ConfigManager
-from translations.strings import LangStrings
 
-from sp_map_cycle.info import info
+from ..info import info
 
+from .strings import strings_config
 
-strings_config = LangStrings(info.basename + "/config")
 
 with ConfigManager(info.basename, cvar_prefix='spmc_') as config_manager:
     config_manager.section("Logging")

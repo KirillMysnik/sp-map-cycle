@@ -164,7 +164,7 @@ class SPMCCommandShowDatabase(SPMCCommand):
                 ))
 
             echo_console("+----+--------------------------------+----------+--------+-------------+")
-            echo_console("* Only showing rows from {} to {}".format(start, start + DB_SHOW_CAP))
+            echo_console("* Only showing rows from {} to {}".format(start, start + DB_SHOW_CAP - 1))
             echo_console("** Only shows if the map was marked old via 'spmc db set-force-old' command")
 
         finally:
