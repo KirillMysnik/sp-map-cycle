@@ -21,6 +21,9 @@ map_start_time = 0
 # time() when current map should end, used by !timeleft command
 map_end_time = 0
 
+# time() when last vote has started, used by keyhint_progress
+vote_start_time = 0
+
 # How many times "Extend this map..." option has won, used
 used_extends = 0
 

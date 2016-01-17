@@ -49,6 +49,7 @@ class MapCycleItem:
     def __init__(self):
         self.votes = 0
         self.nominations = 0
+        self.filename = None
 
     @property
     def name(self):
@@ -234,4 +235,7 @@ class MapCycleWhateverEntry(MapCycleItem):
 
 
 map_cycle_extend_entry = MapCycleExtendEntry()
+map_cycle_extend_entry.filename = -1
+
 map_cycle_whatever_entry = MapCycleWhateverEntry()
+map_cycle_whatever_entry.filename = -2

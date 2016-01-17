@@ -40,6 +40,8 @@ from .info import info
 from .no_spam_say_command import NoSpamSayCommand
 from .spmc_commands import spmc_commands
 
+from .classes.keyhint_progress import keyhint_progress
+
 from .classes.map_cycle_item import map_cycle_extend_entry
 from .classes.map_cycle_item import map_cycle_whatever_entry
 from .classes.map_cycle_item import map_manager
@@ -453,6 +455,7 @@ def launch_vote(scheduled=False):
     log.log_debug("Launching the vote (scheduled={})".format(scheduled))
 
     status.vote_status = status.VoteStatus.IN_PROGRESS
+    status.vote_start_time = time()
 
     # Cancel any scheduled votes in case somebody called us directly
     if delay_scheduled_vote is not None and delay_scheduled_vote.running:
@@ -478,6 +481,13 @@ def launch_vote(scheduled=False):
 
     # Popup callback
     def select_callback(popup, player_index, option):
+        # Increment votes counter for this map
+        option.value.votes += 1
+
+        # KeyHint stats
+        keyhint_progress.count_vote(option.value)
+
+        # User callback
         user = user_manager.get_by_index(player_index)
         user.vote_callback(option.value)
 
@@ -576,6 +586,9 @@ def launch_vote(scheduled=False):
     # Define vote end
     delay_end_vote = Delay(cvar_vote_duration.get_int(), finish_vote)
 
+    # Start KeyHintProgress
+    keyhint_progress.start()
+
     # ... sound
     if cvar_sound_vote_start.get_string() != "":
         Sound(
@@ -601,6 +614,14 @@ def finish_vote():
     if popups.popup_main is not None:
         popups.popup_main.close()
         popups.popup_main = None
+
+    # Stop KeyHintProgress
+    keyhint_progress.stop()
+
+    # Recount votes to prevent reconnected players from messing things up
+    # We only counted votes before to display them in KeyHint area
+    for map_ in map_manager.values():
+        map_.votes = 0
 
     for voted_map in user_manager.get_voted_maps():
         voted_map.votes += 1

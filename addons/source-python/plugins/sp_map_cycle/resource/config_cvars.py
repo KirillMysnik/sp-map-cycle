@@ -122,6 +122,12 @@ with ConfigManager(info.basename, cvar_prefix='spmc_') as config_manager:
         description=strings_config['votemap_whatever_option'],
         min_value=0
     )
+    cvar_show_vote_progress = config_manager.cvar(
+        name="votemap_show_progress",
+        default=1,
+        description=strings_config['votemap_show_progress'],
+        min_value=0
+    )
     cvar_alphabetic_sort_enable = config_manager.cvar(
         name="alphabetic_sort_enable",
         default=0,
