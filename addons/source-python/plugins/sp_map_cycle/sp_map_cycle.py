@@ -72,7 +72,6 @@ from .resource.config_cvars import cvar_vote_duration
 from .resource.config_cvars import cvar_votemap_max_options
 from .resource.config_cvars import cvar_votemap_whatever_option
 
-from .resource.strings import insert_tokens
 from .resource.strings import strings_common
 from .resource.strings import strings_popups
 
@@ -317,7 +316,7 @@ def reload_map_list():
         user.nominate_callback(option.value)
 
     popups.popup_nominate = PagedMenu(select_callback=select_callback,
-                               title=strings_popups['nominate_map'])
+                                      title=strings_popups['nominate_map'])
 
     maps_ = list(map_manager.values())
     for map_ in sorted(maps_, key=lambda map_: map_.filename):
@@ -471,6 +470,8 @@ def launch_vote(scheduled=False):
     popups.popup_likemap.close()
 
     # Reset maps
+    map_cycle_whatever_entry.votes = 0
+    map_cycle_extend_entry.votes = 0
     for map_ in map_manager.values():
         map_.votes = 0
         map_.nominations = 0
@@ -487,9 +488,6 @@ def launch_vote(scheduled=False):
     # First of all, add "I Don't Care" option if it's enabled
     if cvar_votemap_whatever_option.get_bool():
 
-        # Reset votes so that it doesn't increment infinitely
-        map_cycle_whatever_entry.votes = 0
-
         # Add to the list
         popups.popup_main.append(PagedOption(
             text=map_cycle_whatever_entry.name,
@@ -498,9 +496,6 @@ def launch_vote(scheduled=False):
 
     # Only add "Extend this map..." option to scheduled votes
     if scheduled:
-
-        # Reset votes count for this entry
-        map_cycle_extend_entry.votes = 0
 
         # Decide if it's selectable and highlighted
         selectable = status.can_extend()
@@ -966,10 +961,8 @@ def on_cs_win_panel_match(game_event):
 
     # HudMsg
     hud_msg = HudMsg(
-        insert_tokens(
-            strings_popups['nextmap_msg'],
-            map=status.next_map.name
-        ),
+        strings_popups['nextmap_msg'].tokenize(
+                map=status.next_map.name),
         color1=NEXTMAP_MSG_COLOR,
         x=NEXTMAP_MSG_X,
         y=NEXTMAP_MSG_Y,
