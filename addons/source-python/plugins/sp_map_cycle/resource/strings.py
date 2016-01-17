@@ -1,41 +1,21 @@
-from translations.strings import TranslationStrings
+from colors import Color
+
+from advanced_ts import BaseLangStrings
 
 from ..info import info
-from ..recursive_translations import BaseLangStrings
-from ..recursive_translations import ColoredRecursiveTranslationStrings
-from ..recursive_translations import RecursiveTranslationStrings
 
 
-# Map color variables in translation files to actual RGB values
+# Map color variables in translation files to actual Color instances
 COLOR_SCHEME = {
-    'tag': "#242,242,242",
-    'lightgreen': "#4379B7",
-    'default': "#242,242,242",
-    'error': "#FF3636",
+    'color_tag': Color(242, 242, 242),
+    'color_lightgreen': Color(67, 121, 183),
+    'color_default': Color(242, 242, 242),
+    'color_error': Color(255, 54, 54),
 }
+COLORFUL_SIGN = '\x01'
 
 
-strings_common = BaseLangStrings(
-    info.basename + "/strings", base=ColoredRecursiveTranslationStrings)
-
-strings_config = BaseLangStrings(
-    info.basename + "/config", base=TranslationStrings)
-
-strings_mapnames = BaseLangStrings(
-    info.basename + "/mapnames", base=TranslationStrings)
-
-strings_popups = BaseLangStrings(
-    info.basename + "/popups", base=RecursiveTranslationStrings)
-
-
-def insert_tokens(
-        translation_strings,
-        base=RecursiveTranslationStrings,
-        **tokens):
-
-    rs = base()
-    for key, value in translation_strings.items():
-        rs[key] = value
-
-    rs.tokens.update(tokens)
-    return rs
+strings_common = BaseLangStrings(info.basename + "/strings")
+strings_config = BaseLangStrings(info.basename + "/config")
+strings_mapnames = BaseLangStrings(info.basename + "/mapnames")
+strings_popups = BaseLangStrings(info.basename + "/popups")

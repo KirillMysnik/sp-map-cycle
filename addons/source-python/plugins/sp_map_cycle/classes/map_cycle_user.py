@@ -10,11 +10,7 @@ from messages import SayText2
 from players.entity import Player
 from players.helpers import userid_from_index
 
-from translations.strings import TranslationStrings
-
 from .map_cycle_session_user import session_user_manager
-
-from ..recursive_translations import ColoredRecursiveTranslationStrings
 
 from ..namespaces import popups
 from ..namespaces import status
@@ -33,7 +29,7 @@ from ..resource.config_cvars import cvar_votemap_chat_reaction
 from ..resource.config_cvars import cvar_votemap_enable
 
 from ..resource.strings import COLOR_SCHEME
-from ..resource.strings import insert_tokens
+from ..resource.strings import COLORFUL_SIGN
 from ..resource.strings import strings_common
 from ..resource.strings import strings_popups
 
@@ -129,10 +125,10 @@ class MapCycleUser:
             return strings_common['error_not_in_progress']
 
         if (self.voted_map is not None and
-            not cvar_votemap_allow_revote.get_bool()):
+                not cvar_votemap_allow_revote.get_bool()):
 
-            return insert_tokens(strings_common['error_already_voted'],
-                                 map=self.voted_map.name)
+            return strings_common['error_already_voted'].tokenize(
+                map=self.voted_map.name)
 
         return None
 
@@ -148,8 +144,8 @@ class MapCycleUser:
         if (self.nominated_map is not None and
                 not cvar_nominate_allow_revote.get_bool()):
 
-            return insert_tokens(strings_common['error_already_nominated'],
-                                 map=self.nominated_map.name)
+            return strings_common['error_already_nominated'].tokenize(
+                map=self.nominated_map.name)
 
         return None
 
@@ -167,8 +163,8 @@ class MapCycleUser:
 
         seconds = time() - status.map_start_time - cvar_rtv_delay.get_int()
         if seconds < 0:
-            return insert_tokens(
-                strings_common['error_rtv_too_soon'], seconds=-seconds)
+            return strings_common['error_rtv_too_soon'].tokenize(
+                seconds=-seconds)
 
         return None
 
@@ -306,34 +302,30 @@ class MapCycleUser:
         )
 
 
-def tell(players, message, with_tag=True, **tokens):
-    """Send a SayText2 message to a list of Player instances"""
-    for color_token, color_value in COLOR_SCHEME.items():
-        tokens['color_'+color_token] = color_value
-
+def tell(players, message, **tokens):
+    """Send a SayText2 message to a list of Player instances."""
     if isinstance(players, Player):
         players = (players, )
 
     player_indexes = [player.index for player in players]
 
-    if isinstance(message, TranslationStrings):
-        if with_tag:
-            message = insert_tokens(strings_common['chat_tag'],
-                                    base=ColoredRecursiveTranslationStrings,
-                                    message=message)
+    tokens.update(COLOR_SCHEME)
 
-        SayText2(message=message).send(*player_indexes, **tokens)
-        return
+    message = message.tokenize(**tokens)
+    message = strings_common['chat_base'].tokenize(
+        colorful_sign=COLORFUL_SIGN, message=message, **COLOR_SCHEME)
 
-    raise TypeError("Unknown message class: {}".format(type(message)))
+    SayText2(message=message).send(*player_indexes)
+    return
 
 
-def broadcast(message, with_tag=True, **tokens):
-    """Send a SayText2 message to all registered """
-    tell([user.player for user in user_manager.values()],
-         message,
-         with_tag,
-         **tokens)
+def broadcast(message, **tokens):
+    """Send a SayText2 message to all registered users."""
+    tell(
+        [user.player for user in user_manager.values()],
+        message,
+        **tokens
+    )
 
 
 def init_likemap_popup():

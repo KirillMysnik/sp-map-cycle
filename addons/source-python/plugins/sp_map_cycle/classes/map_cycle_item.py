@@ -8,7 +8,6 @@ from ..resource.config_cvars import cvar_predict_missing_fullname
 from ..resource.config_cvars import cvar_recent_maps_limit
 from ..resource.config_cvars import cvar_use_fullname
 
-from ..resource.strings import insert_tokens
 from ..resource.strings import strings_mapnames
 from ..resource.strings import strings_popups
 
@@ -136,23 +135,22 @@ class MapCycleMap(MapCycleItem):
 
     @property
     def full_caption(self):
-        return insert_tokens(strings_popups['caption_default'],
-                             prefix=(strings_popups['prefix_recent'] if
-                                     self.played_recently else ""),
-                             map=self.name,
-                             postfix=(strings_popups['postfix_new'] if
-                                      self.isnew else ""),
-                             postfix2=(
-                                 insert_tokens(
-                                     strings_popups['postfix_nominated'],
-                                     nominations=self.nominations
-                                 ) if self.nominations > 0 else ""),
-                             postfix3=(
-                                 insert_tokens(
-                                     strings_popups['likes'],
-                                     likes=self.rating_str
-                                 )
-                             ))
+        return strings_popups['caption_default'].tokenize(
+             prefix=(strings_popups['prefix_recent'] if
+                     self.played_recently else ""),
+
+             map=self.name,
+
+             postfix=(strings_popups['postfix_new'] if
+                      self.isnew else ""),
+
+             postfix2=strings_popups['postfix_nominated'].tokenize(
+                 nominations=self.nominations) if self.nominations > 0 else "",
+
+             postfix3=strings_popups['likes'].tokenize(
+                 likes=self.rating_str
+             )
+        )
 
     @property
     def isnew(self):
