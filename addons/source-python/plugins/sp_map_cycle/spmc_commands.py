@@ -10,11 +10,12 @@ from paths import BASE_PATH
 from paths import GAME_PATH
 from paths import LOG_PATH
 
-from sp_map_cycle.db import connect
-from sp_map_cycle.db import delete
-from sp_map_cycle.db import select
-from sp_map_cycle.db import update
-from sp_map_cycle.info import info
+from .db import connect
+from .db import delete
+from .db import select
+from .db import update
+
+from .info import info
 
 
 MAPS_FOLDER = str(GAME_PATH / 'maps')
@@ -31,6 +32,7 @@ os.makedirs(DBDUMP_PATH, exist_ok=True)
 j2env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 j2env.filters['strftime'] = lambda timestamp: datetime.fromtimestamp(timestamp).strftime('%c')
 j2template_html = j2env.get_template('databasedump.html')
+j2template_txt = j2env.get_template('databasedump.txt')
 
 
 class SPMCCommand:
@@ -62,6 +64,10 @@ contents only beginning from this ID.
 > spmc db dump-html
 Dumps contents of database.sqlite3 to an HTML page:
 <mod folder>/logs/source-python/sp_map_cycle/databasedump.html
+
+> spmc db dump-txt
+Dumps contents of database.sqlite3 to a text file:
+<mod folder>/logs/source-python/sp_map_cycle/databasedump.txt
 
 > spmc db save
 Saves current maps list from memory to the database
@@ -197,6 +203,37 @@ class SPMCCommandDumpDatabaseHTML(SPMCCommand):
             j2template_html.stream(rows=rows, dumpdate=time()).dump(DBDUMPHTML)
 
             echo_console("Dump written to {}".format(DBDUMPHTML))
+
+        finally:
+            conn.close()
+
+
+class SPMCCommandDumpDatabaseText(SPMCCommand):
+    def callback(self, args):
+        conn = connect()
+        if conn is None:
+            echo_console("Could not connect to the database")
+            return
+
+        try:
+            rows = select(
+                conn,
+                'maps',
+                (
+                        'rowid',
+                        'filename',
+                        'detected',
+                        'force_old',
+                        'likes',
+                        'dislikes',
+                        'man_hours',
+                        'av_session_length'
+                ),
+            )
+
+            j2template_txt.stream(rows=rows, dumpdate=time()).dump(DBDUMPTXT)
+
+            echo_console("Dump written to {}".format(DBDUMPTXT))
 
         finally:
             conn.close()
@@ -382,6 +419,7 @@ spmc_commands['rebuild-mapcycle'] = SPMCCommandRebuildMapCycle('rebuild-mapcycle
 spmc_commands['db'] = SPMCCommandDB('db', spmc_commands['spmc'])
 spmc_commands['db show'] = SPMCCommandShowDatabase('show', spmc_commands['db'])
 spmc_commands['db dump-html'] = SPMCCommandDumpDatabaseHTML('dump-html', spmc_commands['db'])
+spmc_commands['db dump-txt'] = SPMCCommandDumpDatabaseText('dump-txt', spmc_commands['db'])
 spmc_commands['db save'] = SPMCCommandSaveToDatabase('save', spmc_commands['db'])
 spmc_commands['db load'] = SPMCCommandLoadFromDatabase('load', spmc_commands['db'])
 spmc_commands['db set-force-old'] = SPMCCommandSetForceOld('set-force-old', spmc_commands['db'])
