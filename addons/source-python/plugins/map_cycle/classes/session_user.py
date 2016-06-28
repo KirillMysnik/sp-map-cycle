@@ -1,10 +1,11 @@
 from time import time
 
 
-class MapCycleSessionUserManager(dict):
+class SessionUserManager(dict):
     def get_or_create(self, steamid):
         if steamid not in self:
-            self[steamid] = MapCycleSessionUser(steamid)
+            self[steamid] = SessionUser(steamid)
+
         return self[steamid]
 
     def get_map_ratings(self):
@@ -18,10 +19,10 @@ class MapCycleSessionUserManager(dict):
         for session_user in self.values():
             session_user.rating = 0
 
-session_user_manager = MapCycleSessionUserManager()
+session_user_manager = SessionUserManager()
 
 
-class MapCycleSessionUser:
+class SessionUser:
     def __init__(self, steamid):
         self.steamid = steamid
         self.current_user = None

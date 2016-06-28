@@ -2,49 +2,27 @@ from datetime import datetime
 from time import time
 
 from menus import Text
-from menus.radio import SimpleRadioMenu
-from menus.radio import SimpleRadioOption
-
+from menus.radio import SimpleRadioMenu, SimpleRadioOption
 from messages import SayText2
-
 from players.entity import Player
-from players.helpers import userid_from_index
 
-from .map_cycle_session_user import session_user_manager
+from .session_user import session_user_manager
 
-from ..namespaces import popups
-from ..namespaces import status
+from ..namespaces import popups, status
 
-from ..resource.config_cvars import cvar_likemap_enable
-from ..resource.config_cvars import cvar_likemap_whatever_option
-from ..resource.config_cvars import cvar_nextmap_enable
-from ..resource.config_cvars import cvar_nominate_allow_revote
-from ..resource.config_cvars import cvar_nominate_enable
-from ..resource.config_cvars import cvar_rtv_delay
-from ..resource.config_cvars import cvar_rtv_enable
-from ..resource.config_cvars import cvar_timeleft_enable
-from ..resource.config_cvars import cvar_timelimit
-from ..resource.config_cvars import cvar_votemap_allow_revote
-from ..resource.config_cvars import cvar_votemap_chat_reaction
-from ..resource.config_cvars import cvar_votemap_enable
+from ..resource.config_cvars import config_manager
 
-from ..resource.strings import COLOR_SCHEME
-from ..resource.strings import COLORFUL_SIGN
-from ..resource.strings import strings_common
-from ..resource.strings import strings_popups
+from ..resource.strings import COLOR_SCHEME, strings_common, strings_popups
 
 
-class MapCycleUserManager(dict):
+class UserManager(dict):
     def create(self, player):
-        self[player.userid] = MapCycleUser(self, player)
-        return self[player.userid]
+        self[player.index] = MapCycleUser(self, player)
+        return self[player.index]
 
-    def delete(self, user):
-        user.session_user.reset_disconnect()
-        del self[user.player.userid]
-
-    def get_by_index(self, index):
-        return self[userid_from_index(index)]
+    def delete(self, index):
+        self[index].session_user.reset_disconnect()
+        del self[index]
 
     def get_nominated_maps(self):
         for user in self.values():
@@ -87,7 +65,7 @@ class MapCycleUserManager(dict):
         for user in self.values():
             user.reset()
 
-user_manager = MapCycleUserManager()
+user_manager = UserManager()
 
 
 class MapCycleUser:
@@ -115,7 +93,7 @@ class MapCycleUser:
         popup.send(self.player.index)
 
     def get_vote_denial_reason(self):
-        if not cvar_votemap_enable.get_bool():
+        if not config_manager['votemap_enable']:
             return strings_common['error_disabled']
 
         if status.vote_status != status.VoteStatus.IN_PROGRESS:
@@ -125,7 +103,7 @@ class MapCycleUser:
             return strings_common['error_not_in_progress']
 
         if (self.voted_map is not None and
-                not cvar_votemap_allow_revote.get_bool()):
+                not config_manager['votemap_allow_revote']):
 
             return strings_common['error_already_voted'].tokenize(
                 map=self.voted_map.name)
@@ -133,8 +111,8 @@ class MapCycleUser:
         return None
 
     def get_nominate_denial_reason(self):
-        if not (cvar_votemap_enable.get_bool() and
-                cvar_nominate_enable.get_bool()):
+        if not (config_manager['votemap_enable'] and
+                config_manager['nominate_enable']):
 
             return strings_common['error_disabled']
 
@@ -142,7 +120,7 @@ class MapCycleUser:
             return strings_common['error_in_progress']
 
         if (self.nominated_map is not None and
-                not cvar_nominate_allow_revote.get_bool()):
+                not config_manager['nominate_allow_revote']):
 
             return strings_common['error_already_nominated'].tokenize(
                 map=self.nominated_map.name)
@@ -150,8 +128,8 @@ class MapCycleUser:
         return None
 
     def get_rtv_denial_reason(self):
-        if not (cvar_votemap_enable.get_bool() and
-                cvar_rtv_enable.get_bool()):
+        if not (config_manager['votemap_enable'] and
+                config_manager['rtv_enable']):
 
             return strings_common['error_disabled']
 
@@ -161,7 +139,7 @@ class MapCycleUser:
         if self.used_rtv:
             return strings_common['error_rtv_already_used']
 
-        seconds = time() - status.map_start_time - cvar_rtv_delay.get_int()
+        seconds = time() - status.map_start_time - config_manager['rtv_delay']
         if seconds < 0:
             return strings_common['error_rtv_too_soon'].tokenize(
                 seconds=-seconds)
@@ -169,7 +147,7 @@ class MapCycleUser:
         return None
 
     def get_likemap_denial_reason(self):
-        if not cvar_likemap_enable.get_bool():
+        if not config_manager['likemap_enable']:
             return strings_common['error_disabled']
 
         if self.session_user.rating != 0:
@@ -178,19 +156,19 @@ class MapCycleUser:
         return None
 
     def get_nextmap_denial_reason(self):
-        if not cvar_nextmap_enable.get_bool():
+        if not config_manager['nextmap_enable']:
             return strings_common['error_disabled']
 
         return None
 
     def get_timeleft_denial_reason(self):
-        if not cvar_timeleft_enable.get_bool():
+        if not config_manager['timeleft_enable']:
             return strings_common['error_disabled']
 
         return None
 
     def vote_callback(self, map_):
-        from ..sp_map_cycle import check_if_enough_votes
+        from ..map_cycle import check_if_enough_votes
 
         reason = self.get_vote_denial_reason()
         if reason is not None:
@@ -200,9 +178,8 @@ class MapCycleUser:
         self.voted_map = map_
 
         # ... chat message
-        chat_reaction = cvar_votemap_chat_reaction.get_int()
-        if 1 & chat_reaction:
-            if 2 & chat_reaction:
+        if 1 & config_manager['votemap_chat_reaction']:
+            if 2 & config_manager['votemap_chat_reaction']:
                 # Show both nickname and choice
                 broadcast(
                     strings_common['chat_reaction3'],
@@ -216,7 +193,7 @@ class MapCycleUser:
                     player=self.player.name,
                 )
 
-        elif 2 & chat_reaction:
+        elif 2 & config_manager['votemap_chat_reaction']:
             # Show only choice
                 broadcast(
                     strings_common['chat_reaction2'],
@@ -240,7 +217,7 @@ class MapCycleUser:
                   map=map_.name)
 
     def rtv_callback(self):
-        from ..sp_map_cycle import check_if_enough_rtv
+        from ..map_cycle import check_if_enough_rtv
 
         reason = self.get_rtv_denial_reason()
         if reason is not None:
@@ -250,8 +227,7 @@ class MapCycleUser:
         self.used_rtv = True
 
         # ... chat message
-        broadcast(strings_common['used_rtv'],
-                  player=self.player.name)
+        broadcast(strings_common['used_rtv'], player=self.player.name)
 
         # Check RTV ratio
         check_if_enough_rtv()
@@ -274,11 +250,8 @@ class MapCycleUser:
             tell(self.player, strings_common['nextmap_unknown'])
 
         else:
-            tell(
-                self.player,
-                strings_common['nextmap_is'],
-                map=status.next_map.name
-            )
+            tell(self.player, strings_common['nextmap_is'],
+                 map=status.next_map.name)
 
     def timeleft_callback(self):
         reason = self.get_timeleft_denial_reason()
@@ -286,7 +259,7 @@ class MapCycleUser:
             tell(self.player, reason)
             return
 
-        if cvar_timelimit.get_int() == 0:
+        if config_manager['timelimit'] == 0:
             tell(self.player, strings_common['timeleft_never'])
             return
 
@@ -295,11 +268,8 @@ class MapCycleUser:
             return
 
         delta = datetime.fromtimestamp(status.map_end_time) - datetime.now()
-        tell(
-            self.player,
-            strings_common['timeleft_timeleft'],
-            timeleft=str(delta)
-        )
+        tell(self.player, strings_common['timeleft_timeleft'],
+             timeleft=str(delta))
 
 
 def tell(players, message, **tokens):
@@ -313,7 +283,7 @@ def tell(players, message, **tokens):
 
     message = message.tokenize(**tokens)
     message = strings_common['chat_base'].tokenize(
-        colorful_sign=COLORFUL_SIGN, message=message, **COLOR_SCHEME)
+        message=message, **COLOR_SCHEME)
 
     SayText2(message=message).send(*player_indexes)
     return
@@ -321,16 +291,12 @@ def tell(players, message, **tokens):
 
 def broadcast(message, **tokens):
     """Send a SayText2 message to all registered users."""
-    tell(
-        [user.player for user in user_manager.values()],
-        message,
-        **tokens
-    )
+    tell([user.player for user in user_manager.values()], message, **tokens)
 
 
 def init_likemap_popup():
-    def likemap_select_callback(popup, player_index, option):
-        user_manager.get_by_index(player_index).likemap_callback(option.value)
+    def likemap_select_callback(popup, index, option):
+        user_manager[index].likemap_callback(option.value)
 
     popups.popup_likemap = SimpleRadioMenu(
         select_callback=likemap_select_callback)
@@ -340,7 +306,7 @@ def init_likemap_popup():
     choice_index = 1
 
     # First of all, add "I Don't Care" option if it's enabled
-    if cvar_likemap_whatever_option.get_bool():
+    if config_manager['likemap_whatever_option']:
         # Add to the list
         popups.popup_likemap.append(SimpleRadioOption(
             choice_index=choice_index,

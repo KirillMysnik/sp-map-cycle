@@ -2,7 +2,7 @@
 <html>
     <head>
         <meta charset="utf-8" />
-        <title>SPMC DB Dump @{{ dumpdate|strftime }}</title>
+        <title>Map Cycle DB Dump @{{ dumpdate|strftime }}</title>
         <style type="text/css">
             * {
                 font-family: sans-serif;
@@ -55,28 +55,28 @@
     </head>
     <body>
         <div class="main">
-            <h3>Source.Python Map Cycle Database Dump @{{ dumpdate|strftime }}</h3>
+            <h3>Map Cycle Database Dump @{{ dumpdate|strftime }}</h3>
             <table>
                 <tr>
                     <th data-hint="Unique integer identifier for this map - its row number">ID</th>
                     <th data-hint="Map file name (lowercase)">Map File Name (w/o .bsp)</th>
                     <th data-hint="Date/time of when the map was added to the database">Detected</th>
-                    <th data-hint="Shows if you have used 'spmc db set-force-old' on the map">Old? (force_old)</th>
+                    <th data-hint="Shows if you have used 'mc db set-force-old' on the map">Old? (force_old)</th>
                     <th data-hint="Number of likes this map received from players">Likes</th>
                     <th data-hint="Number of dislikes this map received from players">Dislikes</th>
                     <th data-hint="Reflects summary amount of time players have ever spent on the map">Man-hours</th>
-                    <th data-hint="Reflects average session length of all players that have ever played the map. Player's session length equals to 1 if they played the map from the beginning to the end without extension (full timelimit), >1 if they played to the end and the map was extended, <1 if they connected late / disconnected early or there was a !rtv. If the map was ended earlier by not !rtv but by spmc_launch_vote, it still counts as a full timelimit. Ending the map with spmc_launch_vote is the only way to count something valid towards session length if server's timelimit is zero.">Average Session Length</th>
+                    <th data-hint="Reflects average session length of all players that have ever played the map. Player's session length equals to 1 if they played the map from the beginning to the end without extension (full timelimit), >1 if they played to the end and the map was extended, <1 if they connected late / disconnected early or there was a !rtv. If the map was ended earlier by not !rtv but by mc_launch_vote, it still counts as a full timelimit. Ending the map with mc_launch_vote is the only way to count something valid towards session length if server's timelimit is zero.">Average Session Length</th>
                 </tr>
                 {% for row in rows %}
                 <tr>
-                    <td>{{ row.rowid }}</td>
+                    <td>{{ row.id }}</td>
                     <td style="font-family: monospace;">{{ row.filename }}</td>
                     <td>{{ row.detected|strftime }}</td>
                     <td>{% if row.force_old %}YES{% else %}NO{% endif %}</td>
                     <td>{{ row.likes }}</td>
                     <td>{{ row.dislikes }}</td>
                     <td>{{ row.man_hours }}</td>
-                    <td>{{ row.av_session_length }}</td>
+                    <td>{{ row.av_session_len }}</td>
                 </tr>
                 {% endfor %}
             </table>

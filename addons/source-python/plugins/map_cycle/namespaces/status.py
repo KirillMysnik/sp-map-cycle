@@ -1,4 +1,4 @@
-from ..resource.config_cvars import cvar_max_extends
+from ..resource.config_cvars import config_manager
 
 
 class VoteStatus:
@@ -33,4 +33,4 @@ round_end_needed = False
 
 
 def can_extend():
-    return used_extends < cvar_max_extends.get_int()
+    return used_extends < config_manager['max_extends']

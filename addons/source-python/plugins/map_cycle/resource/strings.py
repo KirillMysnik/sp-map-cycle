@@ -12,8 +12,6 @@ COLOR_SCHEME = {
     'color_default': Color(242, 242, 242),
     'color_error': Color(255, 54, 54),
 }
-COLORFUL_SIGN = '\x01'
-
 
 strings_common = BaseLangStrings(info.basename + "/strings")
 strings_config = BaseLangStrings(info.basename + "/config")

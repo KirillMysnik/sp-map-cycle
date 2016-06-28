@@ -3,15 +3,14 @@ from time import time
 from listeners.tick import Delay
 from messages import HintText
 
-from .map_cycle_item import MapCycleWhateverEntry
-from .map_cycle_item import map_manager
+from .server_map import MapCycleWhateverEntry
+from .server_map import map_manager
 
-from .map_cycle_user import user_manager
+from .user import user_manager
 
 from ..namespaces import status
 
-from ..resource.config_cvars import cvar_show_vote_progress
-from ..resource.config_cvars import cvar_vote_duration
+from ..resource.config_cvars import config_manager
 
 from ..resource.strings import strings_popups
 
@@ -20,8 +19,8 @@ EXCLUDE_ENTRY_CLASSES = [MapCycleWhateverEntry, ]
 REFRESH_INTERVAL = 1
 
 
-def format_map(map_):
-    return "-//-" if map_ is None else map_.name
+def format_map(server_map):
+    return "-//-" if server_map is None else server_map.name
 
 
 class KeyHintProgress:
@@ -87,16 +86,15 @@ class KeyHintProgress:
 
         # Check our cvar - we do this this late to allow on-line
         # alteration of this cvar (during the vote)
-        if not cvar_show_vote_progress.get_bool():
+        if not config_manager['votemap_show_progress']:
             return
 
         # Send KeyHint
         if self._message:
 
             # Calculate seconds left
-            timeleft = int(
-                status.vote_start_time + cvar_vote_duration.get_int() - time()
-            )
+            timeleft = int(status.vote_start_time +
+                           config_manager['vote_duration'] - time())
 
             # Send HintText
             HintText(
@@ -127,6 +125,5 @@ class KeyHintProgress:
     def stop(self):
         if self._refresh_delay is not None and self._refresh_delay.running:
             self._refresh_delay.cancel()
-
 
 keyhint_progress = KeyHintProgress()

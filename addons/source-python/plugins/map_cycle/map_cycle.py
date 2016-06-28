@@ -1,81 +1,59 @@
 from datetime import datetime
-from json import load as json_load
-from json import dump as json_dump
+from json import dump as json_dump, load as json_load
 from random import shuffle
 from time import time
 from warnings import warn
 
 from colors import Color
-from commands.server import ServerCommand
 from core import echo_console
 from cvars import ConVar
 from events import Event
-from engines.server import engine_server
-from engines.server import global_vars
-from engines.sound import Sound
+from engines.server import engine_server, global_vars
 from entities.entity import Entity
 from filters.players import PlayerIter
-from listeners import OnClientActive
-from listeners import OnClientDisconnect
-from listeners import OnLevelInit
-from listeners import OnLevelShutdown
-from listeners.tick import Delay
+from listeners import (
+    OnClientActive, OnClientDisconnect, OnLevelInit, OnLevelShutdown)
+
+from listeners.tick import Delay, GameThread
 from loggers import LogManager
 from memory import get_virtual_function
 from memory.hooks import PreHook
-from menus import PagedMenu
-from menus import PagedOption
+from menus import PagedMenu, PagedOption
 from messages import HudMsg
-from paths import CFG_PATH
-from paths import GAME_PATH
+from paths import CFG_PATH, GAME_PATH
 from players.entity import Player
-from players.helpers import userid_from_index
 from stringtables.downloads import Downloadables
 
-from .db import connect
-from .db import insert
-from .db import select
-from .db import update
+from spam_proof_commands.say import SayCommand
+from spam_proof_commands.server import ServerCommand
+
 from .info import info
-from .no_spam_say_command import NoSpamSayCommand
-from .spmc_commands import spmc_commands
+
+from .mc_commands import mc_commands
 
 from .classes.keyhint_progress import keyhint_progress
 
-from .classes.map_cycle_item import map_cycle_extend_entry
-from .classes.map_cycle_item import map_cycle_whatever_entry
-from .classes.map_cycle_item import map_manager
+from .classes.server_map import (
+    map_cycle_extend_entry, map_cycle_whatever_entry, map_manager)
 
-from .classes.map_cycle_session_user import session_user_manager
+from .classes.session_user import session_user_manager
 
-from .classes.map_cycle_user import broadcast
-from .classes.map_cycle_user import tell
-from .classes.map_cycle_user import user_manager
+from .classes.user import broadcast, tell, user_manager
 
-from .namespaces import popups
-from .namespaces import status
+from .models.server_map import ServerMap as DB_ServerMap
 
-from .resource.config_cvars import cvar_alphabetic_sort_by_fullname
-from .resource.config_cvars import cvar_alphabetic_sort_enable
-from .resource.config_cvars import cvar_extend_time
-from .resource.config_cvars import cvar_instant_change_level
-from .resource.config_cvars import cvar_likemap_enable
-from .resource.config_cvars import cvar_likemap_survey_duration
-from .resource.config_cvars import cvar_logging_level
-from .resource.config_cvars import cvar_logging_areas
-from .resource.config_cvars import cvar_nextmap_show_on_match_end
-from .resource.config_cvars import cvar_rtv_needed
-from .resource.config_cvars import cvar_scheduled_vote_time
-from .resource.config_cvars import cvar_sound_vote_start
-from .resource.config_cvars import cvar_sound_vote_end
-from .resource.config_cvars import cvar_timeleft_auto_lastround_warning
-from .resource.config_cvars import cvar_timelimit
-from .resource.config_cvars import cvar_vote_duration
-from .resource.config_cvars import cvar_votemap_max_options
-from .resource.config_cvars import cvar_votemap_whatever_option
+from .namespaces import popups, status
 
-from .resource.strings import strings_common
-from .resource.strings import strings_popups
+from .resource.config_cvars import (
+    config_manager, cvar_logging_areas, cvar_logging_level,
+    cvar_scheduled_vote_time, cvar_timelimit)
+
+from .resource.sqlalchemy import Base, engine, Session
+
+from .resource.strings import strings_common, strings_popups
+
+
+Base.metadata.create_all(engine)
 
 
 NEXTMAP_MSG_COLOR = Color(124, 173, 255)
@@ -88,6 +66,10 @@ NEXTMAP_MSG_HOLDTIME = 10
 NEXTMAP_MSG_FXTIME = 0
 
 
+# Used for SpamProofCommands
+ANTI_SPAM_TIMEOUT_SERVER = 1.0
+ANTI_SPAM_TIMEOUT_PLAYER = 1.0
+
 # mapcycle_default.txt - in case we don't find mapcyclefile
 DEFAULT_MAPCYCLEFILE = "mapcycle_default.txt"
 
@@ -97,14 +79,13 @@ MAPCYCLE_JSON_FILE = GAME_PATH / 'cfg' / "mapcycle.json"
 # List of files to upload to players
 DOWNLOADLIST = CFG_PATH / info.basename / "downloadlist.txt"
 
-# Fallback value if either spmc_timelimit or mp_timelimit were invalid
+# Fallback value if either mc_timelimit or mp_timelimit were invalid
 # Take a look at load()
 NEGATIVE_TIMELIMIT_FALLBACK_VALUE = 60.0
 
-# Fallback value if spmc_scheduled_vote_time exceeds or
-# equals to spmc_timelimit.
-# Current spmc_timelimit value will be multiplied by this fallback value
-# and then applied to spmc_scheduled_vote_time.
+# Fallback value if mc_scheduled_vote_time exceeds or equals to mc_timelimit.
+# Current mc_timelimit value will be multiplied by this fallback value
+# and then applied to mc_scheduled_vote_time.
 # Take a look at schedule_vote()
 INVALID_SCHEDULED_VOTE_TIME_FALLBACK_VALUE = 0.33
 
@@ -170,130 +151,77 @@ def build_json_from_mapcycle_txt():
             raise FileNotFoundError("Missing {}".format(DEFAULT_MAPCYCLEFILE))
 
     rs = []
-    with open(str(mapcycle_txt)) as f:  # TODO: Do we need str() here?
+    with open(mapcycle_txt) as f:
         for line in f:
             line = line.strip()
             if not line:
+                continue
+
+            if line.startswith('//'):
                 continue
 
             rs.append({
                 'filename': line,
             })
 
-    # TODO: Do we need str() below?
-    with open(str(MAPCYCLE_JSON_FILE), 'w') as f:
+    with open(MAPCYCLE_JSON_FILE, 'w') as f:
         json_dump(rs, f, indent=4)
 
 
 def load_maps_from_db():
-    conn = connect()
-    if conn is None:
-        warn(IOError("Couldn't establish connection to the database"))
-        return False
+    session = Session()
 
-    c1 = 0
-    try:
-        rows = select(
-            conn,
-            'maps',
-            (
-                'filename',
-                'detected',
-                'force_old',
-                'likes',
-                'dislikes'
-            )
-        )
+    for db_server_map in session.query(DB_ServerMap).all():
+        map_ = map_manager.get(db_server_map.filename)
+        if map_ is None:
+            continue
 
-        for row in rows:
-            map_ = map_manager.get(row['filename'])
-            if map_ is None:
-                continue
+        map_.in_database = True
+        map_.detected = db_server_map.detected
+        map_.force_old = db_server_map.force_old
+        map_.likes = db_server_map.likes
+        map_.dislikes = db_server_map.dislikes
 
-            map_.in_database = True
-            map_.detected = row['detected']
-            map_.force_old = bool(row['force_old'])
-            map_.likes = row['likes']
-            map_.dislikes = row['dislikes']
-
-            c1 += 1
-
-    finally:
-        conn.close()
-
-    log.log_debug("load_maps_from_db: {} records were loaded".format(c1))
-
-    return True
+    session.close()
 
 
 def save_maps_to_db():
-    conn = connect()
-    if conn is None:
-        warn(IOError("Couldn't establish connection to the database"))
-        return False
+    detected = int(time())
 
-    c1 = c2 = 0
+    session = Session()
+    for server_map in map_manager.values():
+        db_server_map = session.query(DB_ServerMap).filter_by(
+            filename=server_map.filename.lower()).first()
 
-    try:
-        detected = int(time())
-        for map_ in map_manager.values():
-            if map_.in_database:
-                update(
-                    conn,
-                    'maps',
-                    {
-                        'detected': map_.detected,
-                        'force_old': map_.force_old,
-                        'likes': map_.likes,
-                        'dislikes': map_.dislikes,
-                        'man_hours': map_.man_hours,
-                        'av_session_length': map_.av_session_length,
-                    },
-                    where='filename=?',
-                    args=(map_.filename.lower(), ),
-                    commit=False,
-                )
-                c1 += 1
-            else:
-                insert(
-                    conn,
-                    'maps',
-                    {
-                        'filename': map_.filename.lower(),
-                        'detected': detected,
-                        'force_old': map_.force_old,
-                        'likes': map_.likes,
-                        'dislikes': map_.dislikes,
-                        'man_hours': map_.man_hours,
-                        'av_session_length': map_.av_session_length,
-                    },
-                    commit=False,
-                )
-                map_.in_database = True
-                map_.detected = detected
+        if db_server_map is None:
+            server_map.detected = detected
+            server_map.in_database = True
 
-                c2 += 1
+            db_server_map = DB_ServerMap()
+            db_server_map.filename = server_map.filename.lower()
+            db_server_map.detected = detected
 
-        conn.commit()
+            session.add(db_server_map)
 
-    finally:
-        conn.close()
+        db_server_map.force_old = server_map.force_old
+        db_server_map.likes = server_map.likes
+        db_server_map.dislikes = server_map.dislikes
+        db_server_map.man_hours = server_map.man_hours
+        db_server_map.av_session_len = server_map.av_session_len
 
-    log.log_debug("save_maps_to_db: {} records were updated, {} new records "
-                  "were added".format(c1, c2))
-
-    return True
+    session.commit()
+    session.close()
 
 
 def reload_map_list():
     if not isinstance(mapcycle_json, list):
         raise CorruptJSONFile("Parsed object is not a list")
 
-    # Check if vote has not started yet - useful to prevent things
-    # getting dirty because of 'spmc reload-mapcycle'
+    # Check if vote has not started yet - useful to prevent things from
+    # getting dirty because of 'mc reload-mapcycle'
     if status.vote_status != status.VoteStatus.NOT_STARTED:
-         raise RuntimeError("Vote has already started or even ended, "
-                            "can't execute reload_map_list() now")
+        raise RuntimeError("Vote has already started or even ended, "
+                           "can't execute reload_map_list() now")
 
     map_manager.clear()
     for i, json_dict in enumerate(mapcycle_json):
@@ -313,33 +241,36 @@ def reload_map_list():
     log.log_debug("Added {} valid maps".format(len(map_manager)))
 
     # Now rebuild nomination menu
-    def select_callback(popup, player_index, option):
-        user = user_manager.get_by_index(player_index)
+    def select_callback(popup, index, option):
+        user = user_manager[index]
         user.nominate_callback(option.value)
 
     popups.popup_nominate = PagedMenu(select_callback=select_callback,
                                       title=strings_popups['nominate_map'])
 
-    maps_ = list(map_manager.values())
-    for map_ in sorted(maps_, key=lambda map_: map_.filename):
-        selectable = not map_.played_recently
+    server_maps = list(map_manager.values())
+    for server_map in sorted(
+            server_maps, key=lambda server_map: server_map.filename):
+
+        selectable = not server_map.played_recently
         popups.popup_nominate.append(PagedOption(
-            text=map_.name,
-            value=map_,
+            text=server_map.name,
+            value=server_map,
             highlight=selectable,
             selectable=selectable))
 
-    log.log_debug("Added {} maps to the !nominate menu".format(len(maps_)))
+    log.log_debug(
+        "Added {} maps to the !nominate menu".format(len(server_maps)))
 
 
 def reload_maps_from_mapcycle():
     # Load JSON
     try:
-
         # Try to load mapcycle.json
         reload_mapcycle_json()
 
         log.log_debug("Loaded mapcycle.json (first try)")
+
     except FileNotFoundError:
 
         # If it fails, build mapcycle.json from the mapcyclefile file
@@ -376,22 +307,17 @@ def load():
     global mp_timelimit_old_value
     mp_timelimit_old_value = cvar_mp_timelimit.get_float()
 
-    # If spmc_timelimit equals to -1, grab the value from mp_timelimit
-    if cvar_timelimit.get_int() == -1:
+    # If mc_timelimit equals to -1, grab the value from mp_timelimit
+    if config_manager['timelimit'] < 0:
         cvar_timelimit.set_float(mp_timelimit_old_value)
 
-        log.log_debug("spmc_timelimit was -1, set to the value of "
-                      "mp_timelimit (mp_timelimit = {})".format(
-                          mp_timelimit_old_value
-                      ))
+        log.log_debug(
+            "mc_timelimit was -1, set to the value of mp_timelimit "
+            "(mp_timelimit = {})".format(mp_timelimit_old_value))
 
-    # Two cases to catch:
-    # 1. spmc_timelimit was (-1; 0)
-    # 2. spmc_timelimit was set to -1 and mp_timelimit was negative
-    if cvar_timelimit.get_float() < 0:
-        warn(InvalidCVarValue("{} is negative (and doesn't equal to -1), "
-                              "falling back to {}".format(
-            cvar_timelimit._name, NEGATIVE_TIMELIMIT_FALLBACK_VALUE)))
+    if mp_timelimit_old_value < 0:
+        warn(InvalidCVarValue(
+            "mp_timelimit is negative, can't grab value from it"))
 
         cvar_timelimit.set_float(NEGATIVE_TIMELIMIT_FALLBACK_VALUE)
 
@@ -475,12 +401,12 @@ def launch_vote(scheduled=False):
     # Reset maps
     map_cycle_whatever_entry.votes = 0
     map_cycle_extend_entry.votes = 0
-    for map_ in map_manager.values():
-        map_.votes = 0
-        map_.nominations = 0
+    for server_map in map_manager.values():
+        server_map.votes = 0
+        server_map.nominations = 0
 
     # Popup callback
-    def select_callback(popup, player_index, option):
+    def select_callback(popup, index, option):
         # Increment votes counter for this map
         option.value.votes += 1
 
@@ -488,15 +414,14 @@ def launch_vote(scheduled=False):
         keyhint_progress.count_vote(option.value)
 
         # User callback
-        user = user_manager.get_by_index(player_index)
-        user.vote_callback(option.value)
+        user_manager[index].vote_callback(option.value)
 
     # Create new popup
     popups.popup_main = PagedMenu(select_callback=select_callback,
-                           title=strings_popups['choose_map'])
+                                  title=strings_popups['choose_map'])
 
     # First of all, add "I Don't Care" option if it's enabled
-    if cvar_votemap_whatever_option.get_bool():
+    if config_manager['votemap_whatever_option']:
 
         # Add to the list
         popups.popup_main.append(PagedOption(
@@ -525,75 +450,84 @@ def launch_vote(scheduled=False):
 
     user_manager.reset_nominated_maps()
 
-    maps_ = map_manager.values()
+    server_maps = map_manager.values()
 
     # Filter hidden maps out
-    maps_ = list(filter(lambda map_: not map_.hidden, maps_))
+    server_maps = list(filter(
+        lambda server_map: not server_map.is_hidden, server_maps))
 
-    if not maps_:
+    if not server_maps:
         warn(PlayersCannotVote("Please add more maps to the server or "
-                               "reconfigure Source.Python Map Cycle"))
+                               "reconfigure Map Cycle"))
         return
 
-    # Check if we need to do an initial alphabetic sort
-    if cvar_alphabetic_sort_enable.get_bool():
+    # Do we need to do an initial alphabetic sort?
+    if config_manager['alphabetic_sort_enabled']:
 
         # Sort by name (alphabetically)
-        if cvar_alphabetic_sort_by_fullname.get_bool():
-            maps_ = sorted(maps_, key=lambda map_: map_.name)
+        if config_manager['alphabetic_sort_by_fullname']:
+            server_maps = sorted(
+                server_maps, key=lambda server_map: server_map.name)
         else:
-            maps_ = sorted(maps_, key=lambda map_: map_.filename)
+            server_maps = sorted(
+                server_maps, key=lambda server_map: server_map.filename)
+
     else:
 
         # Shuffle
-        shuffle(maps_)
+        shuffle(server_maps)
 
     # Now sort by rating (likes, likes - dislikes or likes:dislikes)
-    if cvar_likemap_enable.get_bool():
-        maps_ = sorted(maps_, key=lambda map_: map_.rating, reverse=True)
+    if config_manager['likemap_enable']:
+        server_maps = sorted(
+            server_maps,
+            key=lambda server_map: server_map.rating, reverse=True)
 
     # Now separate new and old maps
-    maps_ = sorted(maps_, key=lambda map_: map_.isnew, reverse=True)
+    server_maps = sorted(
+        server_maps, key=lambda server_map: server_map.is_new, reverse=True)
 
     # Now sort by nominations
-    maps_ = sorted(maps_, key=lambda map_: map_.nominations, reverse=True)
+    server_maps = sorted(
+        server_maps,
+        key=lambda server_map: server_map.nominations, reverse=True)
 
     # Now put recently played maps to the end
-    maps_ = sorted(maps_, key=lambda map_: map_.played_recently)
+    server_maps = sorted(
+        server_maps, key=lambda server_map: server_map.played_recently)
 
     # Cap options
-    max_options = cvar_votemap_max_options.get_int()
-    if max_options > 0:
-        maps_ = maps_[:max_options]
+    if config_manager['votemap_max_options'] > 0:
+        server_maps = server_maps[:config_manager['votemap_max_options']]
 
     # Fill popup with the maps
-    for map_ in maps_:
+    for server_map in server_maps:
+
         # Add the map to the popup
-        selectable = not map_.played_recently
+        selectable = not server_map.played_recently
         popups.popup_main.append(PagedOption(
-            text=map_.full_caption,
-            value=map_,
+            text=server_map.full_caption,
+            value=server_map,
             highlight=selectable,
             selectable=selectable
         ))
 
-    log.log_debug("Added {} maps to the vote".format(len(maps_)))
+    log.log_debug("Added {} maps to the vote".format(len(server_maps)))
 
     # Send popup to players
     for user in user_manager.values():
         user.send_popup(popups.popup_main)
 
     # Define vote end
-    delay_end_vote = Delay(cvar_vote_duration.get_int(), finish_vote)
+    delay_end_vote = Delay(config_manager['vote_duration'], finish_vote)
 
     # Start KeyHintProgress
     keyhint_progress.start()
 
     # ... sound
-    if cvar_sound_vote_start.get_string() != "":
-        Sound(
-            sample=cvar_sound_vote_start.get_string()
-        ).play(*[user.player.index for user in user_manager.values()])
+    if config_manager['sound_vote_start'] is not None:
+        config_manager['sound_vote_start'].play(
+            *[user.player.index for user in user_manager.values()])
 
     # ... chat message
     broadcast(strings_common['vote_started'])
@@ -620,26 +554,28 @@ def finish_vote():
 
     # Recount votes to prevent reconnected players from messing things up
     # We only counted votes before to display them in KeyHint area
-    for map_ in map_manager.values():
-        map_.votes = 0
+    for server_map in map_manager.values():
+        server_map.votes = 0
 
     for voted_map in user_manager.get_voted_maps():
         voted_map.votes += 1
 
     user_manager.reset_voted_maps()
 
-    maps_ = map_manager.values()
-    maps_ = filter(lambda map_: not map_.hidden, maps_)
+    server_maps = map_manager.values()
+    server_maps = filter(
+        lambda server_map: not server_map.is_hidden, server_maps)
 
     if status.can_extend():
-        candidate_maps = tuple(maps_) + (map_cycle_extend_entry, )
+        candidate_maps = tuple(server_maps) + (map_cycle_extend_entry, )
     else:
-        candidate_maps = maps_
+        candidate_maps = server_maps
 
     candidate_maps = sorted(
-        candidate_maps, key=lambda map_: map_.votes, reverse=True)
+        candidate_maps, key=lambda server_map: server_map.votes, reverse=True)
 
     if not candidate_maps:
+
         # If there're no maps on the server, there's not much we can do
         log.log_debug("No maps to choose from in finish_vote()!")
 
@@ -654,9 +590,9 @@ def finish_vote():
 
     # Leave only maps with max votes number
     result_maps = []
-    for map_ in candidate_maps:
-        if map_.votes == candidate_maps[0].votes:
-            result_maps.append(map_)
+    for server_map in candidate_maps:
+        if server_map.votes == candidate_maps[0].votes:
+            result_maps.append(server_map)
 
     # If you ever want to implement VIP/Premium features into
     # !rtv and keep it fair, here's the place:
@@ -670,8 +606,8 @@ def finish_vote():
         log.log_debug("Winner map: extend-this-map option")
 
         status.used_extends += 1
-        broadcast(strings_common['map_extended'],
-                  time=str(cvar_extend_time.get_int()))
+        broadcast(
+            strings_common['map_extended'], time=config_manager['extend_time'])
 
     else:
         log.log_debug("Winner map: {}".format(winner_map.filename))
@@ -679,15 +615,15 @@ def finish_vote():
         broadcast(strings_common['map_won'], map=winner_map.name)
 
     # ... sound
-    if cvar_sound_vote_end.get_string() != "":
-        Sound(
-            sample=cvar_sound_vote_end.get_string(),
-        ).play(*[user.player.index for user in user_manager.values()])
+    if config_manager['sound_vote_end'] is not None:
+        config_manager['sound_vote_end'].play(
+            *[user.player.index for user in user_manager.values()])
 
 
-def set_next_map(map_):
+def set_next_map(server_map):
+
     # First of all, check if we actually need to extend the current map
-    if isinstance(map_, type(map_cycle_extend_entry)):
+    if isinstance(server_map, type(map_cycle_extend_entry)):
         log.log_debug("Extending current level...")
 
         # Set NOT_STARTED state so that they can nominate maps and stuff
@@ -710,15 +646,16 @@ def set_next_map(map_):
         schedule_vote(was_extended=True)
         return
 
-    log.log_debug("Setting next map to {}...".format(map_.filename))
+    log.log_debug("Setting next map to {}...".format(server_map.filename))
 
     # If we don't need to extend current map, set a new next map
-    status.next_map = map_
+    status.next_map = server_map
 
 
 def schedule_change_level(was_extended=False):
+
     # Do we even need to change levels?
-    if cvar_timelimit.get_int() == 0:
+    if config_manager['timelimit'] == 0:
 
         # If not, no reason to continue
         return
@@ -727,9 +664,9 @@ def schedule_change_level(was_extended=False):
         "Scheduling change_level (was_extended={})".format(was_extended))
 
     if was_extended:
-        seconds = cvar_extend_time.get_float() * 60 + EXTRA_SECONDS_AFTER_VOTE
+        seconds = config_manager['extend_time'] * 60 + EXTRA_SECONDS_AFTER_VOTE
     else:
-        seconds = cvar_timelimit.get_float() * 60 + EXTRA_SECONDS_AFTER_VOTE
+        seconds = config_manager['timelimit'] * 60 + EXTRA_SECONDS_AFTER_VOTE
 
     global delay_changelevel
     delay_changelevel = Delay(seconds, change_level)
@@ -740,8 +677,9 @@ def schedule_change_level(was_extended=False):
 
 
 def schedule_vote(was_extended=False):
+
     # Do we even need scheduled votes?
-    if cvar_timelimit.get_int() == 0:
+    if config_manager['timelimit'] == 0:
 
         # If not, no reason to continue
         return
@@ -753,55 +691,50 @@ def schedule_vote(was_extended=False):
     # from map extension
     if was_extended:
 
-        # If from extension, then the total time left is in
-        # spmc_extend_time
+        # If from extension, then the total time left is in mc_extend_time
 
-        # But we need to check that spmc_scheduled_vote_time does not
+        # But we need to check that mc_scheduled_vote_time does not
         # exceed it
-        if (cvar_scheduled_vote_time.get_float() >=
-                cvar_extend_time.get_float()):
+        if (config_manager['scheduled_vote_time'] >=
+                config_manager['extend_time']):
 
-            new_value = (cvar_extend_time.get_float() *
+            new_value = (config_manager['extend_time'] *
                          INVALID_SCHEDULED_VOTE_TIME_FALLBACK_VALUE)
 
-            warn(InvalidCVarValue("{} exceeds or equals to {}, "
-                                  "falling back to {}".format(
-                cvar_scheduled_vote_time._name,
-                cvar_extend_time._name,
-                new_value
-            )))
+            warn(InvalidCVarValue(
+                "mc_scheduled_vote_time exceeds or equals to mc_extend_time, "
+                "falling back to {}".format(new_value)))
 
             cvar_scheduled_vote_time.set_float(new_value)
 
         # Calculate time to start the vote in
-        seconds = (cvar_extend_time.get_float() * 60 -
-                   cvar_scheduled_vote_time.get_float() * 60 -
-                   cvar_vote_duration.get_int())
+        seconds = (config_manager['extend_time'] * 60 -
+                   config_manager['scheduled_vote_time'] * 60 -
+                   config_manager['vote_duration'])
 
     else:
 
         # But if it's just a regular scheduled vote, then the total time left
-        # is in spmc_timelimit
+        # is in mc_timelimit
 
-        # But then again, we need to check spmc_scheduled_vote_time against
-        # spmc_timelimit
-        if cvar_scheduled_vote_time.get_float() >= cvar_timelimit.get_float():
-            new_value = (cvar_timelimit.get_float() *
+        # But then again, we need to check mc_scheduled_vote_time against
+        # mc_timelimit
+        if (config_manager['scheduled_vote_time'] >=
+                config_manager['timelimit']):
+
+            new_value = (config_manager['timelimit'] *
                          INVALID_SCHEDULED_VOTE_TIME_FALLBACK_VALUE)
 
-            warn(InvalidCVarValue("{} exceeds or equals to {}, "
-                                  "falling back to {}".format(
-                cvar_scheduled_vote_time._name,
-                cvar_timelimit._name,
-                new_value
-            )))
+            warn(InvalidCVarValue(
+                "mc_scheduled_vote_time exceeds or equals to mc_timelimit, "
+                "falling back to {}".format(new_value)))
 
             cvar_scheduled_vote_time.set_float(new_value)
 
         # Calculate time to start the vote in
-        seconds = (cvar_timelimit.get_float() * 60 -
-                   cvar_scheduled_vote_time.get_float() * 60 -
-                   cvar_vote_duration.get_int())
+        seconds = (config_manager['timelimit'] * 60 -
+                   config_manager['scheduled_vote_time'] * 60 -
+                   config_manager['vote_duration'])
 
     # Schedule the vote
     global delay_scheduled_vote
@@ -810,9 +743,8 @@ def schedule_vote(was_extended=False):
     log.log_debug("Scheduled vote starts in {} seconds".format(seconds))
 
     # Schedule likemap survey
-    survey_duration = cvar_likemap_survey_duration.get_int()
-    if survey_duration > 0:
-        seconds = max(0, seconds - survey_duration)
+    if config_manager['likemap_survey_duration'] > 0:
+        seconds = max(0, seconds - config_manager['likemap_survey_duration'])
         global delay_likemap_survey
         delay_likemap_survey = Delay(seconds, launch_likemap_survey)
 
@@ -825,7 +757,7 @@ def change_level(round_end=False):
         raise RuntimeError("It's already time to change the level, "
                            "but next map is yet to be decided")
 
-    if cvar_instant_change_level.get_bool() or round_end:
+    if config_manager['instant_change_level'] or round_end:
         log.log_debug("Ending the game...")
 
         game_end_entity = Entity.find_or_create('game_end')
@@ -836,7 +768,7 @@ def change_level(round_end=False):
 
         status.round_end_needed = True
 
-        if cvar_timeleft_auto_lastround_warning.get_bool():
+        if config_manager['timeleft_auto_lastround_warning']:
             broadcast(strings_common['timeleft_last_round'])
 
 
@@ -853,14 +785,15 @@ def check_if_enough_rtv():
     except ZeroDivisionError:
         return
 
-    if ratio >= cvar_rtv_needed.get_float():
+    if ratio >= config_manager['rtv_needed']:
+
         # Cancel change_level delay if any
         global delay_changelevel
         if delay_changelevel is not None and delay_changelevel.running:
             delay_changelevel.cancel()
 
         # Relaunch change_level delay
-        seconds = cvar_vote_duration.get_int() + EXTRA_SECONDS_AFTER_VOTE
+        seconds = config_manager['vote_duration'] + EXTRA_SECONDS_AFTER_VOTE
         delay_changelevel = Delay(seconds, change_level)
 
         launch_vote(scheduled=False)
@@ -901,7 +834,7 @@ def listener_on_level_init(map_name):
     status.used_extends = 0
 
     # Update database
-    save_maps_to_db()
+    GameThread(target=save_maps_to_db).start()
 
     # Reload maps
     reload_maps_from_mapcycle()
@@ -925,10 +858,7 @@ def listener_on_level_init(map_name):
     map_manager.cap_recent_maps()
 
     log.log_debug(
-        "Recent map names: {}".format(
-            ','.join(map_manager.recent_map_names)
-        )
-    )
+        "Recent map names: {}".format(','.join(map_manager.recent_map_names)))
 
     # Schedule regular vote
     schedule_vote(was_extended=False)
@@ -963,6 +893,7 @@ def on_round_end(game_event):
 
 @Event('cs_win_panel_match')
 def on_cs_win_panel_match(game_event):
+
     # Check if the vote is still in progress
     if status.vote_status == status.VoteStatus.IN_PROGRESS:
         log.log_debug("on_cs_win_panel_match: vote was still in "
@@ -977,7 +908,7 @@ def on_cs_win_panel_match(game_event):
         return
 
     # Check if we need to show it on player screens
-    if not cvar_nextmap_show_on_match_end.get_bool():
+    if not config_manager['nextmap_show_on_match_end']:
         return
 
     # HudMsg
@@ -1010,10 +941,8 @@ def listener_on_client_active(index):
 
 @OnClientDisconnect
 def listener_on_client_disconnect(index):
-    userid = userid_from_index(index)
-    user = user_manager.get(userid)
-    if user is not None:
-        user_manager.delete(user)
+    if index in user_manager:
+        user_manager.delete(index)
 
     if status.vote_status == status.VoteStatus.NOT_STARTED:
         check_if_enough_rtv()
@@ -1034,11 +963,11 @@ def hook_on_pre_change_level(args):
         args[1] = status.next_map.filename
 
 
-@ServerCommand('spmc')
-def command_on_spmc(command):
-    current_command = spmc_commands['spmc']
+@ServerCommand(ANTI_SPAM_TIMEOUT_SERVER, 'mc')
+def command_on_mc(command):
+    current_command = mc_commands['mc']
     i = 0
-    for i in range(1, command.get_arg_count()):
+    for i in range(1, len(command)):
         next_command = current_command.registered_commands.get(
             command[i].lower())
 
@@ -1049,18 +978,18 @@ def command_on_spmc(command):
         current_command = next_command
 
     args = []
-    for j in range(i + 1, command.get_arg_count()):
+    for j in range(i + 1, len(command)):
         args.append(command[j])
 
-    if current_command is spmc_commands['spmc']:
-        echo_console("Unknown SPMC command. Type 'spmc help' to get help")
+    if current_command is mc_commands['mc']:
+        echo_console("Unknown MC command. Type 'mc help' to get help")
         return
 
     current_command.callback(args)
 
 
-@ServerCommand('spmc_launch_vote')
-def command_on_spmc_force_vote(command):
+@ServerCommand(ANTI_SPAM_TIMEOUT_SERVER, 'mc_launch_vote')
+def command_on_mc_force_vote(command):
     if status.vote_status != status.VoteStatus.NOT_STARTED:
         echo_console("Can't launch the vote as it has "
                      "already started or ended")
@@ -1072,9 +1001,9 @@ def command_on_spmc_force_vote(command):
     echo_console("Map vote has been launched")
 
 
-@NoSpamSayCommand(('!votemap', 'votemap'))
-def say_command_on_votemap(command, index, teamonly):
-    user = user_manager.get_by_index(index)
+@SayCommand(ANTI_SPAM_TIMEOUT_PLAYER, ('!votemap', 'votemap'))
+def say_command_on_votemap(command, index, team_only):
+    user = user_manager[index]
     reason = user.get_vote_denial_reason()
     if reason is not None:
         tell(user.player, reason)
@@ -1083,9 +1012,9 @@ def say_command_on_votemap(command, index, teamonly):
     user.send_popup(popups.popup_main)
 
 
-@NoSpamSayCommand(('!nominate', 'nominate'))
-def say_command_on_nominate(command, index, teamonly):
-    user = user_manager.get_by_index(index)
+@SayCommand(ANTI_SPAM_TIMEOUT_PLAYER, ('!nominate', 'nominate'))
+def say_command_on_nominate(command, index, team_only):
+    user = user_manager[index]
     reason = user.get_nominate_denial_reason()
     if reason is not None:
         tell(user.player, reason)
@@ -1094,15 +1023,15 @@ def say_command_on_nominate(command, index, teamonly):
     user.send_popup(popups.popup_nominate)
 
 
-@NoSpamSayCommand(('!rtv', 'rtv', 'rockthevote', '!rockthevote'))
-def say_command_on_rtv(command, index, teamonly):
-    user = user_manager.get_by_index(index)
-    user.rtv_callback()
+@SayCommand(
+    ANTI_SPAM_TIMEOUT_PLAYER, ('!rtv', 'rtv', 'rockthevote', '!rockthevote'))
+def say_command_on_rtv(command, index, team_only):
+    user_manager[index].rtv_callback()
 
 
-@NoSpamSayCommand('!likemap')
-def say_command_on_likemap(command, index, teamonly):
-    user = user_manager.get_by_index(index)
+@SayCommand(ANTI_SPAM_TIMEOUT_PLAYER, '!likemap')
+def say_command_on_likemap(command, index, team_only):
+    user = user_manager[index]
     reason = user.get_likemap_denial_reason()
     if reason is not None:
         tell(user.player, reason)
@@ -1111,13 +1040,13 @@ def say_command_on_likemap(command, index, teamonly):
     user.send_popup(popups.popup_likemap)
 
 
-@NoSpamSayCommand(('!nextmap', 'nextmap'))
-def say_command_on_nextmap(command, index, teamonly):
-    user = user_manager.get_by_index(index)
+@SayCommand(ANTI_SPAM_TIMEOUT_PLAYER, ('!nextmap', 'nextmap'))
+def say_command_on_nextmap(command, index, team_only):
+    user = user_manager[index]
     user.nextmap_callback()
 
 
-@NoSpamSayCommand(('!timeleft', 'timeleft'))
-def say_command_on_nextmap(command, index, teamonly):
-    user = user_manager.get_by_index(index)
+@SayCommand(ANTI_SPAM_TIMEOUT_PLAYER, ('!timeleft', 'timeleft'))
+def say_command_on_nextmap(command, index, team_only):
+    user = user_manager[index]
     user.timeleft_callback()

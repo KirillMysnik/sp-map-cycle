@@ -1,12 +1,6 @@
 from datetime import datetime
 
-from ..resource.config_cvars import cvar_fullname_skips_prefix
-from ..resource.config_cvars import cvar_likemap_enable
-from ..resource.config_cvars import cvar_likemap_method
-from ..resource.config_cvars import cvar_new_map_timeout_days
-from ..resource.config_cvars import cvar_predict_missing_fullname
-from ..resource.config_cvars import cvar_recent_maps_limit
-from ..resource.config_cvars import cvar_use_fullname
+from ..resource.config_cvars import config_manager
 
 from ..resource.strings import strings_mapnames
 from ..resource.strings import strings_popups
@@ -27,22 +21,21 @@ def fits(now, mins, maxs):
     return mins <= now < maxs
 
 
-class MapCycleMapManager(dict):
+class MapManager(dict):
     recent_map_names = []
 
     def create(self, json_dict):
         filename = json_dict['filename'].lower()
-        self[filename] = MapCycleMap(self, json_dict)
+        self[filename] = ServerMap(self, json_dict)
         return self[filename]
 
     def cap_recent_maps(self):
         self.recent_map_names = self.recent_map_names[
                                     len(self.recent_map_names) -
-                                    cvar_recent_maps_limit.get_int():
+                                    config_manager['recent_maps_limit']:
                                 ]
 
-
-map_manager = MapCycleMapManager()
+map_manager = MapManager()
 
 
 class MapCycleItem:
@@ -56,7 +49,7 @@ class MapCycleItem:
         raise NotImplementedError
 
 
-class MapCycleMap(MapCycleItem):
+class ServerMap(MapCycleItem):
     def __init__(self, map_manager, json_dict):
         super().__init__()
 
@@ -70,7 +63,7 @@ class MapCycleMap(MapCycleItem):
         self.likes = 0
         self.dislikes = 0
         self.man_hours = 0.0
-        self.av_session_length = 0.0
+        self.av_session_len = 0.0
         self.in_database = False
 
         if 'timerestrict' in json_dict:
@@ -92,7 +85,7 @@ class MapCycleMap(MapCycleItem):
             prefix = self.filename[:sep_index] if sep_index > -1 else None
             name = self.filename[sep_index+1:]
 
-        if cvar_fullname_skips_prefix.get_bool():
+        if config_manager['fullname_skips_prefix']:
             return name.replace('_', ' ').title()
 
         if prefix is None:
@@ -103,7 +96,7 @@ class MapCycleMap(MapCycleItem):
     @property
     def name(self):
         # Firstly check if we need to use full names at all
-        if not cvar_use_fullname.get_bool():
+        if not config_manager['use_fullname']:
 
             # If not, just return file name
             return self.filename
@@ -122,7 +115,7 @@ class MapCycleMap(MapCycleItem):
             return strings_mapname
 
         # Last chance: maybe we can just guess the full name of the map?
-        if cvar_predict_missing_fullname.get_bool():
+        if config_manager['predict_missing_fullname']:
 
             # If we are allowed to do so, then do it
             return self._predict_fullname()
@@ -143,7 +136,7 @@ class MapCycleMap(MapCycleItem):
              map=self.name,
 
              postfix=(strings_popups['postfix_new'] if
-                      self.isnew else ""),
+                      self.is_new else ""),
 
              postfix2=strings_popups['postfix_nominated'].tokenize(
                  nominations=self.nominations) if self.nominations > 0 else "",
@@ -154,11 +147,11 @@ class MapCycleMap(MapCycleItem):
         )
 
     @property
-    def isnew(self):
+    def is_new(self):
         if self.force_old:
             return False
 
-        days_cap = cvar_new_map_timeout_days.get_int()
+        days_cap = config_manager['new_map_timeout_days']
         if days_cap == -1:
             return False
 
@@ -171,7 +164,7 @@ class MapCycleMap(MapCycleItem):
         return (now_dt - detected_dt).days <= days_cap
 
     @property
-    def hidden(self):
+    def is_hidden(self):
         if self._minutes1 is None or self._minutes2 is None:
             return False
 
@@ -181,7 +174,7 @@ class MapCycleMap(MapCycleItem):
 
     @property
     def rating(self):
-        method = cvar_likemap_method.get_int()
+        method = config_manager['likemap_method']
         if method == 1:
             return self.likes
 
@@ -200,17 +193,16 @@ class MapCycleMap(MapCycleItem):
 
     @property
     def rating_str(self):
-        if not cvar_likemap_enable.get_bool():
+        if not config_manager['likemap_enable']:
             return ""
 
-        method = cvar_likemap_method.get_int()
-        if method == 1:
+        if config_manager['likemap_method'] == 1:
             return str(self.likes)
 
-        if method == 2:
+        if config_manager['likemap_method'] == 2:
             return str(self.likes - self.dislikes)
 
-        if method == 3:
+        if config_manager['likemap_method'] == 3:
             if self.likes == 0:
                 return "0.0%"
 
