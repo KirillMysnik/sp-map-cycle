@@ -69,8 +69,6 @@ user_manager = UserManager()
 
 
 class MapCycleUser:
-    users = {}
-
     def __init__(self, user_manager, player):
         self._user_manager = user_manager
 
@@ -82,7 +80,6 @@ class MapCycleUser:
 
         steamid = player.steamid.upper()
         self.session_user = session_user_manager.get_or_create(steamid)
-        self.session_user.connected_user = self
 
     def reset(self):
         self.voted_map = None

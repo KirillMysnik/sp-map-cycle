@@ -882,6 +882,9 @@ def listener_on_level_shutdown():
 
     session_user_manager.reset_map_ratings()
 
+    for user in user_manager.values():
+        user_manager.delete(user.player.index)
+
 
 @Event('round_end')
 def on_round_end(game_event):

@@ -25,7 +25,6 @@ session_user_manager = SessionUserManager()
 class SessionUser:
     def __init__(self, steamid):
         self.steamid = steamid
-        self.current_user = None
 
         self.rating = 0
         self.session_time = 0
