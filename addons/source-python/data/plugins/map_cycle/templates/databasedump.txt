@@ -1,7 +1,7 @@
 Map Cycle Database Dump @{{ dumpdate|strftime }}
-+----+--------------------------------+----------------------+------------------+----------+----------+-----------+------------------------+
-| ID | Map File Name (w/o .bsp)       | Detected             | Old? (force_old) | Likes    | Dislikes | Man-hours | Average Session Length |
-+----+--------------------------------+----------------------+------------------+----------+----------+-----------+------------------------+{% for row in rows %}
-| {{ (row.rowid | string).ljust(3) }}| {{ row.filename.ljust(31) }}| {{ (row.detected|strftime).ljust(21) }}| {% if row.force_old %}YES              {% else %}NO               {% endif %}| {{ (row.likes|string).ljust(9) }}| {{ (row.dislikes|string).ljust(9) }}| {{ (row.man_hours|string).ljust(10) }}| {{ (row.av_session_len|string).ljust(23) }}|{% endfor %}
-+----+--------------------------------+----------------------+------------------+----------+----------+-----------+------------------------+
++----+--------------------------------+------------------------------------+----------+----------+-----------+------------------------+
+| ID | Map File Name (w/o .bsp)       | Detected                           | Likes    | Dislikes | Man-hours | Average Session Length |
++----+--------------------------------+------------------------------------+----------+----------+-----------+------------------------+{% for row in rows %}
+| {{ (row.rowid | string).ljust(3) }}| {{ row.filename.ljust(31) }}| {{ (row.detected|strftime).ljust(35) }}| {{ (row.likes|string).ljust(9) }}| {{ (row.dislikes|string).ljust(9) }}| {{ (row.man_hours|string).ljust(10) }}| {{ (row.av_session_len|string).ljust(23) }}|{% endfor %}
++----+--------------------------------+------------------------------------+----------+----------+-----------+------------------------+
 https://github.com/KirillMysnik/sp-map-cycle

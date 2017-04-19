@@ -1,7 +1,7 @@
 from sqlalchemy import Boolean, Column, Float, Integer, String
 
-from ..resource.config import config
-from ..resource.sqlalchemy import Base
+from .config import config
+from .orm import Base
 
 
 class ServerMap(Base):
@@ -10,7 +10,6 @@ class ServerMap(Base):
     id = Column(Integer, primary_key=True)
     filename = Column(String(64))
     detected = Column(Integer)
-    force_old = Column(Boolean)
     likes = Column(Integer)
     dislikes = Column(Integer)
     man_hours = Column(Float)

@@ -61,7 +61,6 @@
                     <th data-hint="Unique integer identifier for this map - its row number">ID</th>
                     <th data-hint="Map file name (lowercase)">Map File Name (w/o .bsp)</th>
                     <th data-hint="Date/time of when the map was added to the database">Detected</th>
-                    <th data-hint="Shows if you have used 'mc db set-force-old' on the map">Old? (force_old)</th>
                     <th data-hint="Number of likes this map received from players">Likes</th>
                     <th data-hint="Number of dislikes this map received from players">Dislikes</th>
                     <th data-hint="Reflects summary amount of time players have ever spent on the map">Man-hours</th>
@@ -72,7 +71,6 @@
                     <td>{{ row.id }}</td>
                     <td style="font-family: monospace;">{{ row.filename }}</td>
                     <td>{{ row.detected|strftime }}</td>
-                    <td>{% if row.force_old %}YES{% else %}NO{% endif %}</td>
                     <td>{{ row.likes }}</td>
                     <td>{{ row.dislikes }}</td>
                     <td>{{ row.man_hours }}</td>
