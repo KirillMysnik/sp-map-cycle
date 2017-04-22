@@ -103,7 +103,7 @@ class ServerMap(BaseServerMap):
         if self.filename in map_names_strings:
             return map_names_strings[self.filename]
 
-        if config_manager['predict_missing_filename']:
+        if config_manager['predict_missing_fullname']:
             return self._predict_fullname()
 
         return self.filename
