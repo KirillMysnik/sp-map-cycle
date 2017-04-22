@@ -24,7 +24,7 @@ if GAME_NAME in ('csgo', ):
 else:
     COLOR_SCHEME = {
         'color_tag': Color(242, 242, 242),
-        'color_lightgreen': Color(67, 121, 183),
+        'color_highlight': Color(67, 121, 183),
         'color_default': Color(242, 242, 242),
         'color_error': Color(255, 54, 54),
     }
