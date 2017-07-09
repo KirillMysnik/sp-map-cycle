@@ -25,6 +25,7 @@ MAPCYCLE_JSON_PATH = MC_CFG_PATH / "mapcycle.json"
 DOWNLOADLIST_PATH = MC_CFG_PATH / "downloadlist.txt"
 
 MAPS_DIR = GAME_PATH / "maps"
+WORKSHOP_DIR = MAPS_DIR / "workshop"
 MAPCYCLE_TXT_PATH1 = GAME_PATH / "cfg" / "mapcycle.txt"
 MAPCYCLE_TXT_PATH2 = GAME_PATH / "mapcycle.txt"
 DEFAULT_MAPCYCLE_TXT_PATH = GAME_PATH / "cfg" / "mapcycle_default.txt"

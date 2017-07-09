@@ -19,7 +19,7 @@ from .models import ServerMap as DB_ServerMap
 from .orm import Session
 from .paths import (
     DBDUMP_DIR, DBDUMP_HTML_PATH, DBDUMP_TXT_PATH, MAPCYCLE_TXT_PATH1,
-    MAPS_DIR, TEMPLATES_DIR)
+    MAPS_DIR, TEMPLATES_DIR, WORKSHOP_DIR)
 
 
 # =============================================================================
@@ -290,9 +290,23 @@ def callback(command_info, *prefixes:str):
                 return path.ext.lower() == ".bsp"
 
         rs = []
-        for path in MAPS_DIR.files():
-            if is_valid_map(path):
-                rs.append(path.namebase.lower())
+
+        for map_path in MAPS_DIR.files():
+            if is_valid_map(map_path):
+                rs.append(map_path.namebase.lower())
+
+        if WORKSHOP_DIR.isdir():
+            echo_console(
+                "Found /maps/workshop dir! Scanning Steam Workshop maps...")
+
+            for subdir_path in WORKSHOP_DIR.dirs():
+                subdir_name = subdir_path.namebase.lower()
+
+                for map_path in subdir_path.files():
+                    map_name = map_path.namebase.lower()
+
+                    if is_valid_map(map_path):
+                        rs.append(f"workshop/{subdir_name}/{map_name}")
 
         with open(MAPCYCLE_TXT_PATH1, 'w') as f:
             for map_name in rs:

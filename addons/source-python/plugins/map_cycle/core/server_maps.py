@@ -80,17 +80,23 @@ class ServerMap(BaseServerMap):
             self._minutes2 = hour2 * 60 + minute2
 
     def _predict_fullname(self):
-        sep_index = self.filename.find('_')
-        prefix = self.filename[:sep_index] if sep_index > -1 else None
-        name = self.filename[sep_index+1:]
+        filename = self.filename.split('/')[-1]
 
-        if config_manager['fullname_skips_prefix']:
+        sep_index = filename.find('_')
+        prefix = filename[:sep_index] if sep_index > -1 else None
+        name = filename[sep_index+1:]
+
+        if config_manager['fullname_skips_prefix'] or prefix is None:
             return name.replace('_', ' ').title()
 
-        if prefix is None:
-            return name.title()
+        return "{} {}".format(
+            prefix.upper(),
+            name.replace('_', ' ').title()
+        )
 
-        return "{} {}".format(prefix.upper(), name.replace('_', ' ').title())
+    @property
+    def is_workshop(self):
+        return "workshop/" in self.filename
 
     @property
     def name(self):
@@ -115,8 +121,11 @@ class ServerMap(BaseServerMap):
     @property
     def full_caption(self):
         return popups_strings['caption_default'].tokenized(
-            prefix=(popups_strings['prefix_recent'] if
-                    self.played_recently else ""),
+            prefix1=(popups_strings['prefix_recent'] if
+                     self.played_recently else ""),
+
+            prefix2=(popups_strings['prefix_workshop'] if
+                     self.is_workshop else ""),
 
             map=self.name,
 
