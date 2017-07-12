@@ -88,6 +88,12 @@ config_manager.controlled_cvar(
 )
 config_manager.controlled_cvar(
     bool_handler,
+    name="workshop_maps_use_full_path",
+    default=0,
+    description=config_strings['workshop_maps_use_full_path'],
+)
+config_manager.controlled_cvar(
+    bool_handler,
     name="predict_missing_fullname",
     default=1,
     description=config_strings['predict_missing_fullname'],

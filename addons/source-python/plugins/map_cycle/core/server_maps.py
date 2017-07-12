@@ -80,11 +80,11 @@ class ServerMap(BaseServerMap):
             self._minutes2 = hour2 * 60 + minute2
 
     def _predict_fullname(self):
-        filename = self.filename.split('/')[-1]
+        basename = self.basename
 
-        sep_index = filename.find('_')
-        prefix = filename[:sep_index] if sep_index > -1 else None
-        name = filename[sep_index+1:]
+        sep_index = basename.find('_')
+        prefix = basename[:sep_index] if sep_index > -1 else None
+        name = basename[sep_index+1:]
 
         if config_manager['fullname_skips_prefix'] or prefix is None:
             return name.replace('_', ' ').title()
@@ -99,20 +99,25 @@ class ServerMap(BaseServerMap):
         return "workshop/" in self.filename
 
     @property
+    def basename(self):
+        return self.filename.split('/')[-1]
+
+    @property
     def name(self):
-        if not config_manager['use_fullname']:
+        if config_manager['use_fullname']:
+            if self._fullname is not None:
+                return self._fullname
+
+            if self.filename in map_names_strings:
+                return map_names_strings[self.filename]
+
+            if config_manager['predict_missing_fullname']:
+                return self._predict_fullname()
+
+        if config_manager['workshop_maps_use_full_path']:
             return self.filename
-
-        if self._fullname is not None:
-            return self._fullname
-
-        if self.filename in map_names_strings:
-            return map_names_strings[self.filename]
-
-        if config_manager['predict_missing_fullname']:
-            return self._predict_fullname()
-
-        return self.filename
+        else:
+            return self.basename
 
     @property
     def played_recently(self):
