@@ -952,7 +952,7 @@ def on_cs_win_panel_match(game_event):
         hud_msg.send()
 
         # SayText2
-        broadcast(common_strings['nextmap_msg'].tokenized(
+        broadcast(common_strings['nextmap_msg_colored'].tokenized(
             map=status.next_map.name))
 
 
