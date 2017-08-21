@@ -158,7 +158,7 @@ def save_maps_to_db():
     detected = int(time())
 
     session = Session()
-    for server_map in server_map_manager.values():
+    for server_map in list(server_map_manager.values()):
         db_server_map = session.query(DB_ServerMap).filter_by(
             filename=server_map.filename.lower()).first()
 
