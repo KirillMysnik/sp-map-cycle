@@ -1049,3 +1049,10 @@ def pre_engine_server_changelevel(args):
     # Set our own next map
     if status.next_map is not None:
         args[1] = status.next_map.filename
+
+
+# =============================================================================
+# >> EXTERNAL API
+# =============================================================================
+# Doing it here because this API imports stuff from our main module
+from . import external
