@@ -40,7 +40,7 @@ def can_finish_vote():
 
 
 def get_map_list():
-    return list(server_map_manager.keys())
+    return sorted(server_map_manager.keys())
 
 
 def get_next_map():
